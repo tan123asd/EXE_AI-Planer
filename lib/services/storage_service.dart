@@ -240,4 +240,307 @@ class StorageService {
     await _prefs?.remove(_customTasksKey);
     await _prefs?.remove(_completedTasksKey);
   }
+  
+  // ==================== PERFORMANCE TRACKING ====================
+  
+  static const String _performanceKey = 'task_performance';
+  
+  Future<void> saveTaskPerformance(Map<String, dynamic> performance) async {
+    final performances = getTaskPerformances();
+    performances.add(performance);
+    final performanceJson = jsonEncode(performances);
+    await _prefs?.setString(_performanceKey, performanceJson);
+  }
+  
+  List<Map<String, dynamic>> getTaskPerformances() {
+    final performanceJson = _prefs?.getString(_performanceKey);
+    if (performanceJson == null || performanceJson.isEmpty) {
+      return [];
+    }
+    final List<dynamic> decoded = jsonDecode(performanceJson);
+    return decoded.cast<Map<String, dynamic>>();
+  }
+  
+  // Update task with actual time when completed
+  Future<void> recordTaskCompletion(String taskId, int actualMinutes) async {
+    final tasks = getCustomTasks();
+    final taskIndex = tasks.indexWhere((t) => t['id'] == taskId);
+    
+    if (taskIndex != -1) {
+      final task = tasks[taskIndex];
+      final estimatedMinutes = (task['estimatedTime'] ?? 1) * 60;
+      
+      // Save performance data
+      await saveTaskPerformance({
+        'taskId': taskId,
+        'taskName': task['name'],
+        'estimatedMinutes': estimatedMinutes,
+        'actualMinutes': actualMinutes,
+        'difference': actualMinutes - estimatedMinutes,
+        'accuracy': ((estimatedMinutes / actualMinutes) * 100).round(),
+        'difficulty': task['difficulty'],
+        'category': task['category'],
+        'completedAt': DateTime.now().toIso8601String(),
+      });
+      
+      // Update task with actual time
+      task['actualTime'] = actualMinutes;
+      task['completedAt'] = DateTime.now().toIso8601String();
+      tasks[taskIndex] = task;
+      await saveCustomTasks(tasks);
+    }
+  }
+  
+  // Get average accuracy for estimates
+  Map<String, dynamic> getEstimateAccuracy() {
+    final performances = getTaskPerformances();
+    if (performances.isEmpty) {
+      return {
+        'averageAccuracy': 100,
+        'totalTasks': 0,
+        'overestimated': 0,
+        'underestimated': 0,
+        'accurate': 0,
+      };
+    }
+    
+    int overestimated = 0;
+    int underestimated = 0;
+    int accurate = 0;
+    double totalAccuracy = 0;
+    
+    for (var perf in performances) {
+      final estimated = perf['estimatedMinutes'] ?? 0;
+      final actual = perf['actualMinutes'] ?? 0;
+      final diff = (actual - estimated).abs();
+      
+      if (diff <= 15) { // Within 15 minutes
+        accurate++;
+      } else if (actual > estimated) {
+        underestimated++;
+      } else {
+        overestimated++;
+      }
+      
+      totalAccuracy += perf['accuracy'] ?? 100;
+    }
+    
+    return {
+      'averageAccuracy': (totalAccuracy / performances.length).round(),
+      'totalTasks': performances.length,
+      'overestimated': overestimated,
+      'underestimated': underestimated,
+      'accurate': accurate,
+    };
+  }
+  
+  // ==================== BREAK REMINDERS ====================
+  
+  static const String _breakSettingsKey = 'break_settings';
+  
+  Future<void> saveBreakSettings(Map<String, dynamic> settings) async {
+    final settingsJson = jsonEncode(settings);
+    await _prefs?.setString(_breakSettingsKey, settingsJson);
+  }
+  
+  Map<String, dynamic> getBreakSettings() {
+    final settingsJson = _prefs?.getString(_breakSettingsKey);
+    if (settingsJson == null || settingsJson.isEmpty) {
+      return {
+        'enabled': true,
+        'workDuration': 50, // minutes
+        'breakDuration': 10, // minutes
+        'longBreakDuration': 30, // minutes
+        'longBreakAfterSessions': 4, // number of sessions
+      };
+    }
+    return jsonDecode(settingsJson);
+  }
+  
+  // ==================== SCHEDULE CONFLICT DETECTION ====================
+  
+  // Check if a time slot conflicts with existing schedule
+  bool hasScheduleConflict(DateTime startTime, DateTime endTime) {
+    // Check conflicts with existing schedule items
+    final schedule = getGeneratedSchedule();
+    
+    for (var item in schedule) {
+      final itemStart = DateTime.tryParse(item['startTime'] ?? '');
+      final itemEnd = DateTime.tryParse(item['endTime'] ?? '');
+      
+      if (itemStart != null && itemEnd != null) {
+        // Check overlap
+        if (startTime.isBefore(itemEnd) && endTime.isAfter(itemStart)) {
+          return true;
+        }
+      }
+    }
+    
+    // 🔧 Check conflicts with recurring Schedules (fixed time slots)
+    final tasks = getCustomTasks();
+    
+    for (var task in tasks) {
+      // 🔧 NEW: Check recurring schedules
+      if (task['taskType'] == 'Schedules') {
+        final weekdays = task['weekdays'];
+        final startTimeStr = task['startTime'];
+        final endTimeStr = task['endTime'];
+        
+        if (weekdays != null && startTimeStr != null && endTimeStr != null) {
+          List<int> scheduleWeekdays = [];
+          if (weekdays is List) {
+            scheduleWeekdays = weekdays.cast<int>();
+          }
+          
+          // Check if proposed time falls on one of the recurring days
+          if (scheduleWeekdays.contains(startTime.weekday)) {
+            // Parse schedule time (format: "HH:MM")
+            final startParts = startTimeStr.toString().split(':');
+            final endParts = endTimeStr.toString().split(':');
+            
+            if (startParts.length == 2 && endParts.length == 2) {
+              final scheduleStart = DateTime(
+                startTime.year,
+                startTime.month,
+                startTime.day,
+                int.parse(startParts[0]),
+                int.parse(startParts[1]),
+              );
+              
+              final scheduleEnd = DateTime(
+                startTime.year,
+                startTime.month,
+                startTime.day,
+                int.parse(endParts[0]),
+                int.parse(endParts[1]),
+              );
+              
+              // Check time overlap on that day
+              if (startTime.isBefore(scheduleEnd) && endTime.isAfter(scheduleStart)) {
+                return true; // Conflicts with recurring schedule
+              }
+            }
+          }
+        }
+      }
+      
+      // 🔧 Check conflicts with Task type (with deadline)
+      if (task['taskType'] == 'Task' && task['deadline'] != null) {
+        final taskDeadline = DateTime.tryParse(task['deadline']);
+        
+        if (taskDeadline != null) {
+          // Get estimated time (stored as int hours or as string)
+          int durationMinutes = 60; // Default 1 hour
+          
+          if (task['estimatedTime'] != null) {
+            if (task['estimatedTime'] is int) {
+              durationMinutes = (task['estimatedTime'] as int) * 60;
+            } else if (task['estimatedTime'] is String) {
+              final estimatedTime = task['estimatedTime'] as String;
+              if (estimatedTime.contains('30 min')) {
+                durationMinutes = 60;
+              } else if (estimatedTime.contains('1 hour')) {
+                durationMinutes = 60;
+              } else if (estimatedTime.contains('2 hours')) {
+                durationMinutes = 120;
+              } else if (estimatedTime.contains('3 hours')) {
+                durationMinutes = 180;
+              } else if (estimatedTime.contains('4 hours')) {
+                durationMinutes = 240;
+              } else if (estimatedTime.contains('5+ hours')) {
+                durationMinutes = 300;
+              }
+            }
+          }
+          
+          // 🔧 Check if task has specific time or just date
+          if (taskDeadline.hour != 0 || taskDeadline.minute != 0) {
+            // Task has specific time - deadline is the START time
+            final taskStart = taskDeadline;
+            final taskEnd = taskDeadline.add(Duration(minutes: durationMinutes));
+            
+            // Check overlap
+            if (startTime.isBefore(taskEnd) && endTime.isAfter(taskStart)) {
+              return true;
+            }
+          }
+          // If task only has date (00:00), we don't know exact time, skip conflict check
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  // Find next available time slot
+  DateTime? findNextAvailableSlot(int durationMinutes, DateTime afterTime) {
+    final schedule = getGeneratedSchedule();
+    DateTime checkTime = afterTime;
+    
+    // Make sure we start from current time if afterTime is in the past
+    final now = DateTime.now();
+    if (checkTime.isBefore(now)) {
+      checkTime = now;
+    }
+    
+    // Try next 7 days
+    for (int day = 0; day < 7; day++) {
+      final checkDay = DateTime(
+        checkTime.year,
+        checkTime.month,
+        checkTime.day + day,
+      );
+      
+      // Define available time slots (avoid regular work hours 8AM-5PM on weekdays)
+      List<int> availableHours;
+      final isWeekday = checkDay.weekday >= 1 && checkDay.weekday <= 5;
+      
+      if (isWeekday) {
+        // Weekday: Early morning (6-8) or Evening (18-22)
+        availableHours = [6, 7, 18, 19, 20, 21, 22];
+      } else {
+        // Weekend: More flexible (8-22)
+        availableHours = [8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+      }
+      
+      // Try each available hour
+      for (int hour in availableHours) {
+        final slotStart = DateTime(
+          checkDay.year,
+          checkDay.month,
+          checkDay.day,
+          hour,
+          0,
+        );
+        
+        // Skip if in the past
+        if (slotStart.isBefore(now)) continue;
+        
+        final slotEnd = slotStart.add(Duration(minutes: durationMinutes));
+        
+        // Check if end time is reasonable (before 11 PM)
+        if (slotEnd.hour >= 23) continue;
+        
+        // Check conflicts
+        if (!hasScheduleConflict(slotStart, slotEnd)) {
+          return slotStart;
+        }
+      }
+    }
+    
+    return null; // No available slot found
+  }
+  
+  // Get schedule for a specific day
+  List<Map<String, dynamic>> getScheduleForDay(DateTime day) {
+    final schedule = getGeneratedSchedule();
+    return schedule.where((item) {
+      final itemStart = DateTime.tryParse(item['startTime'] ?? '');
+      if (itemStart == null) return false;
+      
+      return itemStart.year == day.year &&
+             itemStart.month == day.month &&
+             itemStart.day == day.day;
+    }).toList();
+  }
 }

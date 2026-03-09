@@ -25,22 +25,28 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   
   String _taskName = '';
   String _difficulty = 'Medium';
-  String _priority = 'Medium';
+  String _taskType = 'Task'; // 🔧 Task (with deadline) or Schedules (recurring with fixed time)
   DateTime? _deadline;
   TimeOfDay? _deadlineTime;
-  Set<String> _selectedCategories = {'Study'};
+  TimeOfDay? _scheduleStartTime; // 🆕 For Schedules only
+  TimeOfDay? _scheduleEndTime; // 🆕 For Schedules only
+  Set<int> _selectedWeekdays = {}; // 🆕 For recurring schedules (1=Monday, 7=Sunday)
+  String _category = 'Study'; // 🔧 Single category instead of set
   String _notes = '';
   String _estimatedTime = '1 hour';
   bool _showCustomTime = false;
   bool _showAIPreview = false;
   bool _isGenerating = false;
+  int? _selectedSuggestionIndex;
   
   // AI Preview data
   String _aiEstimatedEffort = '';
   List<String> _aiSuggestedSlots = [];
+  List<DateTime> _aiSuggestedStartTimes = [];
+  List<Map<String, dynamic>> _aiSuggestedSessions = []; // 🆕 Full session data
 
   final List<String> _difficulties = ['Easy', 'Medium', 'Hard'];
-  final List<String> _priorities = ['Low', 'Medium', 'High'];
+  final List<String> _taskTypes = ['Task', 'Schedules']; // 🔧 Changed from priorities
   final List<String> _timeOptions = ['30 min', '1 hour', '2 hours', '3 hours', 'Custom'];
   final List<String> _categories = ['Study', 'Personal', 'Health', 'Skill', 'Other'];
 
@@ -121,13 +127,31 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         setState(() {
           _deadline = pickedDate;
           _deadlineTime = pickedTime;
+          _selectedSuggestionIndex = null; // 🔧 Reset selection since user manually picked time
         });
       }
     }
   }
 
   void _generateAIEstimate() async {
-    if (_formKey.currentState!.validate() && _deadline != null) {
+    // 🔧 Validation based on task type
+    bool isValid = false;
+    String errorMessage = '';
+    
+    if (_taskType == 'Task') {
+      // Task validation: needs deadline
+      isValid = _formKey.currentState!.validate() && _deadline != null;
+      errorMessage = 'Please fill in task name and deadline';
+    } else {
+      // Schedules validation: needs weekdays and start/end time
+      isValid = _formKey.currentState!.validate() && 
+                _selectedWeekdays.isNotEmpty && 
+                _scheduleStartTime != null && 
+                _scheduleEndTime != null;
+      errorMessage = 'Please fill in task name, dates, and time range';
+    }
+    
+    if (isValid) {
       _formKey.currentState!.save();
       
       setState(() {
@@ -137,9 +161,12 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       // Simulate AI processing
       await Future.delayed(const Duration(seconds: 2));
       
-      // Generate AI estimate
-      final random = Random();
-      int totalHours = 1;
+      // 🔧 Different logic for Task vs Schedules
+      if (_taskType == 'Task') {
+        // === AI ESTIMATE FOR TASK ===
+        // Generate AI estimate
+        final random = Random();
+        int totalHours = 1;
       
       if (_estimatedTime.contains('30 min')) {
         totalHours = 1;
@@ -160,38 +187,145 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         totalHours = (totalHours * 0.8).ceil();
       }
       
+      // 🆕 Apply historical performance data to improve estimates
+      final accuracy = _storage.getEstimateAccuracy();
+      if (accuracy['totalTasks'] > 5) {
+        final avgAccuracy = accuracy['averageAccuracy'];
+        if (avgAccuracy < 80) {
+          // User tends to underestimate, increase time
+          totalHours = (totalHours * 1.2).ceil();
+        }
+      }
+      
       _aiEstimatedEffort = '$totalHours hour${totalHours > 1 ? 's' : ''}';
       
-      // Generate suggested time slots
+      // 🆕 Get break settings
+      final breakSettings = _storage.getBreakSettings();
+      final needsBreaks = totalHours > 1 && breakSettings['enabled'];
+      
+      // Generate suggested time slots with conflict detection
       _aiSuggestedSlots = [];
+      _aiSuggestedStartTimes = []; // 🔧 Clear start times array
+      _aiSuggestedSessions = []; // 🔧 Clear sessions array
       final now = DateTime.now();
       
       if (totalHours <= 2) {
         // Single session
-        final suggestedDay = _difficulty == 'Hard' ? now : now.add(const Duration(days: 1));
-        final timeSlot = _difficulty == 'Hard' ? 9 : 20;
-        _aiSuggestedSlots.add(
-          '${DateFormat('EEEE').format(suggestedDay)} ${timeSlot.toString().padLeft(2, '0')}:00 – ${(timeSlot + totalHours).toString().padLeft(2, '0')}:00'
-        );
+        final durationMinutes = totalHours * 60;
+        DateTime? slotStart;
+        
+        // 🆕 IMPROVED: Find available slot starting from now
+        slotStart = _storage.findNextAvailableSlot(durationMinutes, now);
+        
+        if (slotStart != null) {
+          final slotEnd = slotStart.add(Duration(minutes: durationMinutes));
+          
+          // 🔧 Save start time for later use
+          _aiSuggestedStartTimes.add(slotStart);
+          
+          // 🆕 Save full session data
+          _aiSuggestedSessions.add({
+            'startTime': slotStart.toIso8601String(),
+            'endTime': slotEnd.toIso8601String(),
+            'duration': durationMinutes,
+          });
+          
+          // 🆕 Format with AM/PM
+          String slotText = '${DateFormat('EEEE, MMM d').format(slotStart)} • '
+              '${_formatTimeWithAMPM(slotStart)} – ${_formatTimeWithAMPM(slotEnd)}';
+          
+          // 🆕 Add break reminder if needed
+          if (needsBreaks) {
+            final workDuration = breakSettings['workDuration'];
+            slotText += '\n⏱️ Break after ${workDuration}min';
+          }
+          
+          _aiSuggestedSlots.add(slotText);
+        } else {
+          _aiSuggestedSlots.add('⚠️ No available slots found in next 7 days');
+        }
       } else {
         // Split into multiple sessions
         int remainingHours = totalHours;
-        int dayOffset = 0;
+        int sessionCount = 0;
+        DateTime searchFrom = now;
         
-        while (remainingHours > 0) {
+        // 🔧 FIX: Track suggested slots to avoid duplicates
+        List<Map<String, DateTime>> suggestedSlots = [];
+        
+        while (remainingHours > 0 && sessionCount < 5) {
           final sessionHours = remainingHours > 2 ? 2 : remainingHours;
-          final suggestedDay = now.add(Duration(days: dayOffset));
-          final timeSlot = 20;
+          final sessionMinutes = sessionHours * 60;
           
-          _aiSuggestedSlots.add(
-            '${DateFormat('EEEE').format(suggestedDay)} ${timeSlot.toString().padLeft(2, '0')}:00 – ${(timeSlot + sessionHours).toString().padLeft(2, '0')}:00'
+          // 🔧 FIX: Find available slot that doesn't conflict with already suggested slots
+          DateTime? slotStart = _findNextAvailableSlotWithTracking(
+            sessionMinutes,
+            searchFrom,
+            suggestedSlots,
           );
           
-          remainingHours -= sessionHours;
-          dayOffset++;
+          if (slotStart != null) {
+            final slotEnd = slotStart.add(Duration(minutes: sessionMinutes));
+            
+            // 🔧 FIX: Add to tracking list
+            suggestedSlots.add({'start': slotStart, 'end': slotEnd});
+            
+            // 🔧 Save start time for later use
+            _aiSuggestedStartTimes.add(slotStart);
+            
+            // 🆕 Save full session data
+            _aiSuggestedSessions.add({
+              'startTime': slotStart.toIso8601String(),
+              'endTime': slotEnd.toIso8601String(),
+              'duration': sessionMinutes,
+            });
+            
+            // 🆕 Format with AM/PM
+            String slotText = '${DateFormat('EEEE, MMM d').format(slotStart)} • '
+                '${_formatTimeWithAMPM(slotStart)} – ${_formatTimeWithAMPM(slotEnd)} '
+                '(Session ${sessionCount + 1})';
+            
+            // 🆕 Add break reminder
+            if (needsBreaks) {
+              final workDuration = breakSettings['workDuration'];
+              final breakDuration = breakSettings['breakDuration'];
+              slotText += '\n⏱️ ${workDuration}min work / ${breakDuration}min break';
+            }
+            
+            _aiSuggestedSlots.add(slotText);
+            
+            // 🔧 FIX: Search for next session at least 2 hours after this one starts
+            // This ensures sessions are spread out, not overlapping
+            searchFrom = slotStart.add(Duration(hours: 2, minutes: 30));
+          } else {
+            break; // No more slots available
+          }
           
-          if (_aiSuggestedSlots.length >= 3) break;
+          remainingHours -= sessionHours;
+          sessionCount++;
         }
+        
+        if (_aiSuggestedSlots.isEmpty) {
+          _aiSuggestedSlots.add('⚠️ Schedule is too busy, consider rescheduling other tasks');
+        }
+      }
+      } else {
+        // === PREVIEW FOR SCHEDULES ===
+        _aiSuggestedSlots = [];
+        _aiSuggestedStartTimes = [];
+        _aiSuggestedSessions = [];
+        
+        // Format weekdays
+        final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        final weekdaysList = _selectedWeekdays.toList()..sort();
+        final weekdaysText = weekdaysList.map((d) => days[d - 1]).join(', ');
+        
+        // Format time range
+        final startTimeText = _scheduleStartTime!.format(context);
+        final endTimeText = _scheduleEndTime!.format(context);
+        
+        _aiEstimatedEffort = 'Recurring schedule';
+        _aiSuggestedSlots.add('📅 Every $weekdaysText\n🕐 $startTimeText – $endTimeText');
       }
       
       setState(() {
@@ -204,11 +338,11 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
-            children: const [
-              Icon(Icons.warning, color: Colors.white, size: 20),
-              SizedBox(width: 12),
+            children: [
+              const Icon(Icons.warning, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text('Please fill in task name and deadline'),
+                child: Text(errorMessage),
               ),
             ],
           ),
@@ -221,9 +355,138 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       );
     }
   }
+  
+  // 🆕 Helper function to format time with AM/PM
+  String _formatTimeWithAMPM(DateTime time) {
+    final hour = time.hour;
+    final minute = time.minute;
+    
+    if (hour == 0) {
+      return '12:${minute.toString().padLeft(2, '0')} AM';
+    } else if (hour < 12) {
+      return '$hour:${minute.toString().padLeft(2, '0')} AM';
+    } else if (hour == 12) {
+      return '12:${minute.toString().padLeft(2, '0')} PM';
+    } else {
+      return '${hour - 12}:${minute.toString().padLeft(2, '0')} PM';
+    }
+  }
+  
+  // 🔧 Helper function to find slot that doesn't conflict with already suggested slots
+  DateTime? _findNextAvailableSlotWithTracking(
+    int durationMinutes,
+    DateTime searchFrom,
+    List<Map<String, DateTime>> alreadySuggested,
+  ) {
+    final now = DateTime.now();
+    DateTime checkTime = searchFrom.isBefore(now) ? now : searchFrom;
+    
+    // Try next 7 days
+    for (int day = 0; day < 7; day++) {
+      final checkDay = DateTime(
+        checkTime.year,
+        checkTime.month,
+        checkTime.day + day,
+      );
+      
+      // Define available time slots
+      final isWeekday = checkDay.weekday >= 1 && checkDay.weekday <= 5;
+      List<int> availableHours = isWeekday 
+          ? [6, 7, 18, 19, 20, 21, 22]
+          : [8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+      
+      for (int hour in availableHours) {
+        final slotStart = DateTime(
+          checkDay.year,
+          checkDay.month,
+          checkDay.day,
+          hour,
+          0,
+        );
+        
+        // Skip if in the past
+        if (slotStart.isBefore(now)) continue;
+        
+        final slotEnd = slotStart.add(Duration(minutes: durationMinutes));
+        
+        // Check if end time is reasonable
+        if (slotEnd.hour >= 23) continue;
+        
+        // 🔧 Check conflict with already suggested slots
+        bool conflictsWithSuggested = false;
+        for (var suggested in alreadySuggested) {
+          final suggestedStart = suggested['start']!;
+          final suggestedEnd = suggested['end']!;
+          
+          // Check overlap
+          if (slotStart.isBefore(suggestedEnd) && slotEnd.isAfter(suggestedStart)) {
+            conflictsWithSuggested = true;
+            break;
+          }
+        }
+        
+        if (conflictsWithSuggested) continue;
+        
+        // Check conflict with existing schedule
+        if (!_storage.hasScheduleConflict(slotStart, slotEnd)) {
+          return slotStart;
+        }
+      }
+    }
+    
+    return null; // No available slot found
+  }
 
   Future<void> _addTaskToPlan() async {
-    if (!_formKey.currentState!.validate() || _deadline == null) {
+    // 🔧 Validation for Schedules
+    if (_taskType == 'Schedules') {
+      if (_selectedWeekdays.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.warning, color: Colors.white, size: 20),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text('Please select at least one day for recurring schedule'),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+        return;
+      }
+      
+      if (_scheduleStartTime == null || _scheduleEndTime == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.warning, color: Colors.white, size: 20),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text('Please set start and end time for schedule'),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+        return;
+      }
+    }
+    
+    // Validation for Task
+    if (_taskType == 'Task' && (!_formKey.currentState!.validate() || _deadline == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -247,31 +510,78 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     
     _formKey.currentState!.save();
     
+    // Parse estimated time (only for Task type)
     int estimatedHours = 1;
-    if (_estimatedTime.contains('30 min')) {
-      estimatedHours = 1;
-    } else if (_estimatedTime.contains('1 hour')) {
-      estimatedHours = 1;
-    } else if (_estimatedTime.contains('2 hours')) {
-      estimatedHours = 2;
-    } else if (_estimatedTime.contains('3 hours')) {
-      estimatedHours = 3;
-    } else if (_showCustomTime && _customTimeController.text.isNotEmpty) {
-      estimatedHours = int.tryParse(_customTimeController.text) ?? 2;
+    if (_taskType == 'Task') {
+      if (_estimatedTime.contains('30 min')) {
+        estimatedHours = 1;
+      } else if (_estimatedTime.contains('1 hour')) {
+        estimatedHours = 1;
+      } else if (_estimatedTime.contains('2 hours')) {
+        estimatedHours = 2;
+      } else if (_estimatedTime.contains('3 hours')) {
+        estimatedHours = 3;
+      } else if (_showCustomTime && _customTimeController.text.isNotEmpty) {
+        estimatedHours = int.tryParse(_customTimeController.text) ?? 2;
+      }
     }
     
-    final taskData = {
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
-      'name': _taskName,
-      'subject': _selectedCategories.first,
-      'difficulty': _difficulty,
-      'deadline': _deadline?.toIso8601String(),
-      'estimatedTime': estimatedHours,
-      'category': _selectedCategories.first,
-      'priority': _priority,
-      'notes': _notes,
-      'createdAt': DateTime.now().toIso8601String(),
-    };
+    // 🆕 Get break settings
+    final breakSettings = _storage.getBreakSettings();
+    
+    Map<String, dynamic> taskData;
+    
+    if (_taskType == 'Task') {
+      // 🔧 Task: has deadline
+      DateTime finalDeadline = _deadline!;
+      if (_deadlineTime != null) {
+        finalDeadline = DateTime(
+          _deadline!.year,
+          _deadline!.month,
+          _deadline!.day,
+          _deadlineTime!.hour,
+          _deadlineTime!.minute,
+        );
+      }
+      
+      taskData = {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'name': _taskName,
+        'subject': _category,
+        'difficulty': _difficulty,
+        'deadline': finalDeadline.toIso8601String(),
+        'estimatedTime': estimatedHours,
+        'category': _category,
+        'taskType': 'Task',
+        'notes': _notes,
+        'createdAt': DateTime.now().toIso8601String(),
+        // 🆕 Break reminders
+        'needsBreak': estimatedHours > 1 && breakSettings['enabled'],
+        'breakInterval': breakSettings['workDuration'],
+        'breakDuration': breakSettings['breakDuration'],
+        // 🆕 For performance tracking
+        'startedAt': null,
+        'completedAt': null,
+        'actualTime': null,
+        // 🆕 AI suggested sessions (for multi-session tasks)
+        'sessions': _aiSuggestedSessions.isNotEmpty ? _aiSuggestedSessions : null,
+      };
+    } else {
+      // 🔧 Schedule: has fixed start/end time + recurring weekdays
+      taskData = {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'name': _taskName,
+        'subject': _category,
+        'difficulty': _difficulty,
+        'category': _category,
+        'taskType': 'Schedules',
+        'weekdays': _selectedWeekdays.toList(),
+        'startTime': '${_scheduleStartTime!.hour.toString().padLeft(2, '0')}:${_scheduleStartTime!.minute.toString().padLeft(2, '0')}',
+        'endTime': '${_scheduleEndTime!.hour.toString().padLeft(2, '0')}:${_scheduleEndTime!.minute.toString().padLeft(2, '0')}',
+        'notes': _notes,
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+    }
     
     await _storage.addCustomTask(taskData);
     
@@ -309,18 +619,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     }
   }
 
-  Color _getPriorityColor(String priority) {
-    switch (priority) {
-      case 'Low':
-        return AppColors.success;
-      case 'Medium':
-        return AppColors.medium;
-      case 'High':
-        return AppColors.danger;
-      default:
-        return AppColors.textSecondary;
-    }
-  }
+  // 🔧 Removed _getPriorityColor - no longer needed
 
   IconData _getCategoryIcon(String category) {
     switch (category) {
@@ -354,6 +653,51 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           ),
         ),
       ],
+    );
+  }
+
+  // 🆕 Build weekday button for recurring schedules
+  Widget _buildWeekdayButton(String label, int weekday) {
+    final isSelected = _selectedWeekdays.contains(weekday);
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            _selectedWeekdays.remove(weekday);
+          } else {
+            _selectedWeekdays.add(weekday);
+          }
+        });
+      },
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? AppColors.primary 
+              : AppColors.background,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isSelected 
+                ? AppColors.primary 
+                : AppColors.textSecondary.withOpacity(0.3),
+            width: 1.5,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isSelected 
+                  ? Colors.white 
+                  : AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -444,75 +788,343 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                   ),
                   const SizedBox(height: 16),
                   
-                  // 2. Deadline
+                  // 2. Category (Task Type)
                   _buildCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildSectionLabel('Deadline', Icons.calendar_today_outlined),
+                        _buildSectionLabel('Category', Icons.label_outlined),
                         const SizedBox(height: 16),
-                        InkWell(
-                          onTap: () => _selectDeadline(context),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.background,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _deadline != null 
-                                    ? AppColors.primary.withOpacity(0.3)
-                                    : Colors.transparent,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.event,
-                                  color: _deadline != null 
-                                      ? AppColors.primary 
-                                      : AppColors.textSecondary,
-                                  size: 20,
+                        Row(
+                          children: _taskTypes.map((type) {
+                            final isSelected = _taskType == type;
+                            
+                            return Expanded(
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  right: type != _taskTypes.last ? 8.0 : 0,
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    _deadline != null && _deadlineTime != null
-                                        ? '${DateFormat('d MMM yyyy').format(_deadline!)} • ${_deadlineTime!.format(context)}'
-                                        : 'Select date and time',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      color: _deadline != null
-                                          ? AppColors.textPrimary
-                                          : AppColors.textSecondary,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _taskType = type;
+                                      // Reset weekdays if switching to Task
+                                      if (type == 'Task') {
+                                        _selectedWeekdays.clear();
+                                      }
+                                    });
+                                  },
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected 
+                                          ? AppColors.textSecondary.withOpacity(0.15)
+                                          : AppColors.background,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isSelected 
+                                            ? AppColors.textPrimary
+                                            : Colors.transparent,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        type,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: isSelected 
+                                              ? AppColors.textPrimary
+                                              : AppColors.textSecondary,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
-                                Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: AppColors.textSecondary,
-                                  size: 14,
-                                ),
-                              ],
-                            ),
-                          ),
+                              ),
+                            );
+                          }).toList(),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
                   
-                  // 3. Estimated Time
-                  _buildCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionLabel('Estimated Time', Icons.access_time_outlined),
+                  // 2b. Weekday Selector (only for Schedules)
+                  if (_taskType == 'Schedules') ...[
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('Dates', Icons.date_range_outlined),
+                          const SizedBox(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildWeekdayButton('M', 1),
+                              _buildWeekdayButton('T', 2),
+                              _buildWeekdayButton('W', 3),
+                              _buildWeekdayButton('T', 4),
+                              _buildWeekdayButton('F', 5),
+                              _buildWeekdayButton('S', 6),
+                              _buildWeekdayButton('S', 7),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  
+                  // 3. Deadline (only for Task type)
+                  if (_taskType == 'Task') ...[
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('Deadline', Icons.calendar_today_outlined),
+                          const SizedBox(height: 16),
+                          InkWell(
+                            onTap: () => _selectDeadline(context),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _deadline != null 
+                                      ? AppColors.primary.withOpacity(0.3)
+                                      : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.event,
+                                    color: _deadline != null 
+                                        ? AppColors.primary 
+                                        : AppColors.textSecondary,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _deadline != null && _deadlineTime != null
+                                          ? '${DateFormat('d MMM yyyy').format(_deadline!)} • ${_deadlineTime!.format(context)}'
+                                          : 'Select date and time',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                        color: _deadline != null
+                                            ? AppColors.textPrimary
+                                            : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: AppColors.textSecondary,
+                                    size: 14,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  
+                  // 3b. Start/End Time (only for Schedules type)
+                  if (_taskType == 'Schedules') ...[
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('Start time', Icons.access_time),
+                          const SizedBox(height: 16),
+                          InkWell(
+                            onTap: () async {
+                              final TimeOfDay? picked = await showTimePicker(
+                                context: context,
+                                initialTime: _scheduleStartTime ?? TimeOfDay.now(),
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: Theme.of(context).copyWith(
+                                      colorScheme: ColorScheme.light(
+                                        primary: AppColors.primary,
+                                        onPrimary: Colors.white,
+                                        surface: Colors.white,
+                                        onSurface: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (picked != null) {
+                                setState(() {
+                                  _scheduleStartTime = picked;
+                                });
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _scheduleStartTime != null 
+                                      ? AppColors.primary.withOpacity(0.3)
+                                      : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.schedule,
+                                    color: _scheduleStartTime != null 
+                                        ? AppColors.primary 
+                                        : AppColors.textSecondary,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _scheduleStartTime != null
+                                          ? _scheduleStartTime!.format(context)
+                                          : 'Select start time',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                        color: _scheduleStartTime != null
+                                            ? AppColors.textPrimary
+                                            : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: AppColors.textSecondary,
+                                    size: 14,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('End time', Icons.access_time_filled),
+                          const SizedBox(height: 16),
+                          InkWell(
+                            onTap: () async {
+                              final TimeOfDay? picked = await showTimePicker(
+                                context: context,
+                                initialTime: _scheduleEndTime ?? TimeOfDay.now(),
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: Theme.of(context).copyWith(
+                                      colorScheme: ColorScheme.light(
+                                        primary: AppColors.primary,
+                                        onPrimary: Colors.white,
+                                        surface: Colors.white,
+                                        onSurface: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (picked != null) {
+                                setState(() {
+                                  _scheduleEndTime = picked;
+                                });
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _scheduleEndTime != null 
+                                      ? AppColors.primary.withOpacity(0.3)
+                                      : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.schedule,
+                                    color: _scheduleEndTime != null 
+                                        ? AppColors.primary 
+                                        : AppColors.textSecondary,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _scheduleEndTime != null
+                                          ? _scheduleEndTime!.format(context)
+                                          : 'Select end time',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                        color: _scheduleEndTime != null
+                                            ? AppColors.textPrimary
+                                            : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: AppColors.textSecondary,
+                                    size: 14,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  
+                  // 4. Estimated Time (only for Task type)
+                  if (_taskType == 'Task') ...[
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('Estimated Time', Icons.access_time_outlined),
                         const SizedBox(height: 16),
                         Wrap(
                           spacing: 8,
@@ -589,7 +1201,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                   ),
                   const SizedBox(height: 16),
                   
-                  // 4. Difficulty
+                  // 6. Difficulty
                   _buildCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -648,90 +1260,25 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     ),
                   ),
                   const SizedBox(height: 16),
+                ],
                   
-                  // 5. Priority
+                  // 5. Subject
                   _buildCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildSectionLabel('Priority', Icons.flag_outlined),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: _priorities.map((prior) {
-                            final isSelected = _priority == prior;
-                            final color = _getPriorityColor(prior);
-                            
-                            return Expanded(
-                              child: Padding(
-                                padding: EdgeInsets.only(
-                                  right: prior != _priorities.last ? 8.0 : 0,
-                                ),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _priority = prior;
-                                    });
-                                  },
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                    decoration: BoxDecoration(
-                                      color: isSelected 
-                                          ? color 
-                                          : AppColors.background,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: isSelected 
-                                            ? color 
-                                            : Colors.transparent,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      prior,
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: isSelected 
-                                            ? Colors.white 
-                                            : AppColors.textPrimary,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // 6. Category
-                  _buildCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionLabel('Category', Icons.label_outlined),
+                        _buildSectionLabel('Subject', Icons.bookmark_outline),
                         const SizedBox(height: 16),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: _categories.map((category) {
-                            final isSelected = _selectedCategories.contains(category);
+                          children: _categories.map((cat) {
+                            final isSelected = _category == cat;
                             
                             return GestureDetector(
                               onTap: () {
                                 setState(() {
-                                  if (isSelected) {
-                                    if (_selectedCategories.length > 1) {
-                                      _selectedCategories.remove(category);
-                                    }
-                                  } else {
-                                    _selectedCategories.add(category);
-                                  }
+                                  _category = cat;
                                 });
                               },
                               child: AnimatedContainer(
@@ -756,7 +1303,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      _getCategoryIcon(category),
+                                      _getCategoryIcon(cat),
                                       size: 16,
                                       color: isSelected
                                           ? AppColors.primary
@@ -764,13 +1311,13 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      category,
+                                      cat,
                                       style: TextStyle(
-                                        fontSize: 13,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.w600,
                                         color: isSelected
                                             ? AppColors.primary
-                                            : AppColors.textPrimary,
+                                            : AppColors.textSecondary,
                                       ),
                                     ),
                                   ],
@@ -910,35 +1457,92 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   color: AppColors.textSecondary,
                                 ),
                               ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Tap a suggestion to set it as deadline',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
                               const SizedBox(height: 8),
-                              ..._aiSuggestedSlots.map((slot) => Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.event_available,
-                                      color: AppColors.success,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        slot,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppColors.textPrimary,
+                              ..._aiSuggestedSlots.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final slot = entry.value;
+                                final isSelected = _selectedSuggestionIndex == index;
+                                
+                                return GestureDetector(
+                                  onTap: () {
+                                    // 🔧 Set deadline from suggestion
+                                    if (index < _aiSuggestedStartTimes.length) {
+                                      final suggestedTime = _aiSuggestedStartTimes[index];
+                                      setState(() {
+                                        _selectedSuggestionIndex = index;
+                                        _deadline = DateTime(
+                                          suggestedTime.year,
+                                          suggestedTime.month,
+                                          suggestedTime.day,
+                                        );
+                                        _deadlineTime = TimeOfDay(
+                                          hour: suggestedTime.hour,
+                                          minute: suggestedTime.minute,
+                                        );
+                                      });
+                                      
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Row(
+                                            children: const [
+                                              Icon(Icons.check_circle, color: Colors.white, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('✨ Deadline set!'),
+                                            ],
+                                          ),
+                                          backgroundColor: AppColors.success,
+                                          duration: const Duration(seconds: 1),
+                                          behavior: SnackBarBehavior.floating,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
                                         ),
-                                      ),
+                                      );
+                                    }
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isSelected 
+                                          ? AppColors.primary.withOpacity(0.1)
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: isSelected
+                                          ? Border.all(color: AppColors.primary, width: 2)
+                                          : null,
                                     ),
-                                  ],
-                                ),
-                              )).toList(),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isSelected ? Icons.check_circle : Icons.event_available,
+                                          color: isSelected ? AppColors.primary : AppColors.success,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            slot,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
                             ],
                           ),
                         ),

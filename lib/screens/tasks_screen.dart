@@ -51,10 +51,31 @@ class _TasksScreenState extends State<TasksScreen> {
     final startHour = 9;
     final endHour = startHour + estimatedHours;
     
-    final startFormatted = startHour > 12 ? startHour - 12 : startHour;
-    final endFormatted = endHour > 12 ? endHour - 12 : endHour;
+    // Format start time with AM/PM
+    String startFormatted;
+    if (startHour == 0) {
+      startFormatted = '12:00 AM';
+    } else if (startHour < 12) {
+      startFormatted = '$startHour:00 AM';
+    } else if (startHour == 12) {
+      startFormatted = '12:00 PM';
+    } else {
+      startFormatted = '${startHour - 12}:00 PM';
+    }
     
-    return '${startFormatted.toString().padLeft(2, '0')}:00 - ${endFormatted.toString().padLeft(2, '0')}:00';
+    // Format end time with AM/PM
+    String endFormatted;
+    if (endHour == 0) {
+      endFormatted = '12:00 AM';
+    } else if (endHour < 12) {
+      endFormatted = '$endHour:00 AM';
+    } else if (endHour == 12) {
+      endFormatted = '12:00 PM';
+    } else {
+      endFormatted = '${endHour - 12}:00 PM';
+    }
+    
+    return '$startFormatted - $endFormatted';
   }
 
   @override

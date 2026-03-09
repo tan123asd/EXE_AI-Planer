@@ -7,6 +7,7 @@ import '../widgets/timeline_item.dart';
 import '../widgets/priority_task_card.dart';
 import '../widgets/status_task_card.dart';
 import '../widgets/progress_stats_card.dart';
+import '../widgets/performance_tracking_card.dart';
 import '../services/storage_service.dart';
 import 'new_task_input_screen.dart';
 import 'tasks_screen.dart';
@@ -44,7 +45,53 @@ class _HomeScreenState extends State<HomeScreen> {
     
     setState(() {
       // Load custom tasks from storage
-      _todayTasks = _storage.getCustomTasks();
+      final allTasks = _storage.getCustomTasks();
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+      
+      // 🆕 Filter tasks for today
+      _todayTasks = allTasks.where((task) {
+        // Schedules: check if today's weekday is in the weekdays list
+        if (task['taskType'] == 'Schedules') {
+          final weekdays = task['weekdays'];
+          if (weekdays != null && weekdays is List) {
+            return weekdays.contains(today.weekday);
+          }
+          return false;
+        }
+        
+        // Task: check if has session today OR deadline is today
+        if (task['taskType'] == 'Task') {
+          // Check sessions first
+          final sessions = task['sessions'];
+          if (sessions != null && sessions is List) {
+            // Has sessions - check if any session is today
+            return sessions.any((session) {
+              try {
+                final sessionStart = DateTime.parse(session['startTime']);
+                final sessionDate = DateTime(sessionStart.year, sessionStart.month, sessionStart.day);
+                return sessionDate.isAtSameMomentAs(todayDate);
+              } catch (e) {
+                return false;
+              }
+            });
+          }
+          
+          // No sessions - check deadline
+          final deadline = task['deadline'];
+          if (deadline != null) {
+            try {
+              final deadlineDate = DateTime.parse(deadline);
+              final deadlineDateOnly = DateTime(deadlineDate.year, deadlineDate.month, deadlineDate.day);
+              return deadlineDateOnly.isAtSameMomentAs(todayDate);
+            } catch (e) {
+              return false;
+            }
+          }
+        }
+        
+        return false;
+      }).toList();
       
       // Calculate total focus hours
       _totalFocusHours = _todayTasks.fold(0, (sum, task) => sum + (task['estimatedTime'] as int? ?? 1));
@@ -88,14 +135,110 @@ class _HomeScreenState extends State<HomeScreen> {
     return '$formattedHour:00 ${hour < 12 ? 'AM' : 'PM'}';
   }
 
-  String _formatTimeRange(int estimatedHours) {
-    final startHour = 9 + (_todayTasks.indexOf(_todayTasks.firstWhere((t) => t['estimatedTime'] == estimatedHours, orElse: () => {})) * 2);
-    final endHour = startHour + estimatedHours;
+  // 🔧 FIXED: Format time range from actual deadline or schedule times
+  String _formatTimeRange(Map<String, dynamic> task) {
+    // 🔧 For Schedules type - use fixed start/end time
+    if (task['taskType'] == 'Schedules') {
+      final startTime = task['startTime'];
+      final endTime = task['endTime'];
+      
+      if (startTime != null && endTime != null) {
+        // 🆕 Parse "HH:MM" strings and format to AM/PM
+        return '${_formatTimeStringToAMPM(startTime)} - ${_formatTimeStringToAMPM(endTime)}';
+      }
+    }
     
-    final startFormatted = startHour > 12 ? startHour - 12 : startHour;
-    final endFormatted = endHour > 12 ? endHour - 12 : endHour;
+    // 🔧 For Task type - check sessions first, then deadline
+    if (task['taskType'] == 'Task') {
+      final sessions = task['sessions'];
+      
+      // 🆕 If task has sessions, find today's session
+      if (sessions != null && sessions is List && sessions.isNotEmpty) {
+        final today = DateTime.now();
+        final todayDate = DateTime(today.year, today.month, today.day);
+        
+        // Find session for today
+        for (var session in sessions) {
+          try {
+            final sessionStart = DateTime.parse(session['startTime']);
+            final sessionEnd = DateTime.parse(session['endTime']);
+            final sessionDate = DateTime(sessionStart.year, sessionStart.month, sessionStart.day);
+            
+            if (sessionDate.isAtSameMomentAs(todayDate)) {
+              return '${_formatTimeWithAMPM(sessionStart)} - ${_formatTimeWithAMPM(sessionEnd)}';
+            }
+          } catch (e) {
+            // Continue to next session
+          }
+        }
+      }
+      
+      // 🔧 Fallback: use deadline if no sessions
+      final estimatedHours = task['estimatedTime'] as int? ?? 1;
+      final durationMinutes = estimatedHours * 60;
+      
+      // Try to get actual deadline with time
+      DateTime? taskStartTime;
+      if (task['deadline'] != null) {
+        try {
+          taskStartTime = DateTime.parse(task['deadline']);
+        } catch (e) {
+          taskStartTime = null;
+        }
+      }
+      
+      // If task has specific time (not midnight), use it
+      if (taskStartTime != null && (taskStartTime.hour != 0 || taskStartTime.minute != 0)) {
+        final endTime = taskStartTime.add(Duration(minutes: durationMinutes));
+        return '${_formatTimeWithAMPM(taskStartTime)} - ${_formatTimeWithAMPM(endTime)}';
+      }
+      
+      // Otherwise, use default scheduling (9 AM start + index offset)
+      final taskIndex = _todayTasks.indexOf(task);
+      final startHour = 9 + (taskIndex * 2);
+      final endHour = startHour + estimatedHours;
+      
+      final startTime = DateTime(2026, 1, 1, startHour, 0);
+      final endTime = DateTime(2026, 1, 1, endHour, 0);
+      
+      return '${_formatTimeWithAMPM(startTime)} - ${_formatTimeWithAMPM(endTime)}';
+    }
     
-    return '${startFormatted.toString().padLeft(2, '0')}:00 - ${endFormatted.toString().padLeft(2, '0')}:00';
+    // Default fallback
+    return '9:00 AM - 10:00 AM';
+  }
+  
+  // 🆕 Helper to format time with AM/PM
+  String _formatTimeWithAMPM(DateTime time) {
+    final hour = time.hour;
+    final minute = time.minute;
+    
+    if (hour == 0) {
+      return '12:${minute.toString().padLeft(2, '0')} AM';
+    } else if (hour < 12) {
+      return '$hour:${minute.toString().padLeft(2, '0')} AM';
+    } else if (hour == 12) {
+      return '12:${minute.toString().padLeft(2, '0')} PM';
+    } else {
+      return '${hour - 12}:${minute.toString().padLeft(2, '0')} PM';
+    }
+  }
+  
+  // 🆕 Helper to parse "HH:MM" string and format to AM/PM
+  String _formatTimeStringToAMPM(String timeString) {
+    try {
+      final parts = timeString.split(':');
+      if (parts.length != 2) return timeString;
+      
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+      
+      // Create dummy DateTime to use existing formatter
+      final dummyDate = DateTime(2026, 1, 1, hour, minute);
+      return _formatTimeWithAMPM(dummyDate);
+    } catch (e) {
+      return timeString; // Return original if parsing fails
+    }
   }
 
   Color _getTimelineColor(int index) {
@@ -132,6 +275,23 @@ class _HomeScreenState extends State<HomeScreen> {
       default:
         return 'Medium';
     }
+  }
+
+  // 🆕 Format weekdays for display
+  String _formatWeekdays(dynamic weekdays) {
+    if (weekdays == null) return 'Not set';
+    
+    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    List<int> daysList = [];
+    
+    if (weekdays is List) {
+      daysList = weekdays.cast<int>();
+    }
+    
+    if (daysList.isEmpty) return 'Not set';
+    
+    daysList.sort();
+    return daysList.map((d) => days[d - 1]).join(', ');
   }
 
   Widget _buildHomeContent() {
@@ -185,6 +345,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 dayStreak: _dayStreak,
                 focusHours: _totalFocusHours,
               ),
+            
+            // Performance Tracking Card - Temporarily hidden
+            // const SizedBox(height: AppSpacing.lg),
+            // const PerformanceTrackingCard(),
+            
             const SizedBox(height: AppSpacing.xl),
             
             // Today's Schedule Header
@@ -265,7 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 StatusTaskCard(
                   taskId: _todayTasks[i]['id'] ?? '',
                   title: _todayTasks[i]['name'] ?? 'Untitled Task',
-                  timeSlot: _formatTimeRange(_todayTasks[i]['estimatedTime'] as int? ?? 1),
+                  timeSlot: _formatTimeRange(_todayTasks[i]), // 🔧 Pass full task object
                   duration: '${_todayTasks[i]['estimatedTime'] ?? 1}h',
                   difficulty: _todayTasks[i]['difficulty'] ?? 'Medium',
                   category: _todayTasks[i]['category'] ?? 'General',
@@ -280,60 +445,127 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
             const SizedBox(height: AppSpacing.xl),
             
-            // Priority Tasks Header
-            const Text(
-              'Priority Tasks',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
+            // Recurring Schedules Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppColors.primary.withOpacity(0.15),
+                        AppColors.primary.withOpacity(0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.event_repeat_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Recurring Schedules',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Your weekly routines',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary.withOpacity(0.7),
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.md),
             
-            // Priority Task Cards - Dynamic from storage
-            if (_todayTasks.isEmpty) ...[
+            // Recurring Schedule Cards - Filter by taskType == 'Schedules'
+            if (_todayTasks.where((task) => task['taskType'] == 'Schedules').isEmpty) ...[
               Container(
-                padding: const EdgeInsets.all(AppSpacing.xl),
+                padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.primary.withOpacity(0.03),
+                      AppColors.primary.withOpacity(0.01),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.primary.withOpacity(0.1),
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.calendar_month_rounded,
+                        size: 32,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No recurring schedules',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Add schedules that repeat weekly',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary.withOpacity(0.7),
+                      ),
                     ),
                   ],
                 ),
-                child: Text(
-                  'Add tasks to see your priority list',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
               ),
             ] else ...[
-              // Sort tasks by priority: Hard > Medium > Easy
-              for (var task in [..._todayTasks]..sort((a, b) {
-                final priorityOrder = {'Hard': 0, 'Medium': 1, 'Easy': 2};
-                return (priorityOrder[a['difficulty']] ?? 3)
-                    .compareTo(priorityOrder[b['difficulty']] ?? 3);
-              })) ...[
+              // Show recurring schedules
+              for (var task in _todayTasks.where((t) => t['taskType'] == 'Schedules')) ...[
                 PriorityTaskCard(
-                  title: task['name'] ?? 'Untitled Task',
-                  subtitle: task['category'] ?? 'General',
-                  bestSlot: _formatTimeRange(task['estimatedTime'] as int? ?? 1),
-                  priority: _mapDifficultyToPriority(task['difficulty'] ?? 'Medium'),
+                  title: task['name'] ?? 'Untitled Schedule',
+                  subtitle: _formatWeekdays(task['weekdays']),
+                  bestSlot: _formatTimeRange(task),
+                  priority: 'Schedule', // Changed from difficulty
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Starting ${task['name']}...')),
                     );
                   },
                 ),
-                const SizedBox(height: AppSpacing.sm),
               ],
             ],
             const SizedBox(height: AppSpacing.xl),

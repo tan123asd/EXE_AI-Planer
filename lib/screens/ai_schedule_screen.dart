@@ -40,6 +40,10 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
           title: item['title'] ?? 'Untitled',
           subject: item['subject'] ?? 'General',
           difficulty: item['difficulty'] ?? 'Medium',
+          startTime: item['startTime'] != null ? DateTime.tryParse(item['startTime']) : null,
+          endTime: item['endTime'] != null ? DateTime.tryParse(item['endTime']) : null,
+          hasBreak: item['hasBreak'] ?? false,
+          breakAfterMinutes: item['breakAfterMinutes'],
         );
       }).toList();
     } else {
@@ -52,6 +56,8 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
           title: 'Study Math',
           subject: 'Calculus',
           difficulty: 'Hard',
+          startTime: DateTime.now().copyWith(hour: 8, minute: 0),
+          endTime: DateTime.now().copyWith(hour: 9, minute: 30),
         ),
         ScheduleItem(
           id: '2',
@@ -60,6 +66,8 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
           title: 'Gym',
           subject: 'Personal Development',
           difficulty: 'Easy',
+          startTime: DateTime.now().copyWith(hour: 14, minute: 0),
+          endTime: DateTime.now().copyWith(hour: 15, minute: 0),
         ),
         ScheduleItem(
           id: '3',
@@ -68,6 +76,10 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
           title: 'Data Structures',
           subject: 'Computer Science',
           difficulty: 'Medium',
+          startTime: DateTime.now().copyWith(hour: 20, minute: 0),
+          endTime: DateTime.now().copyWith(hour: 21, minute: 0),
+          hasBreak: true,
+          breakAfterMinutes: 50,
         ),
         ScheduleItem(
           id: '4',
@@ -76,6 +88,8 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
           title: 'Physics Lab',
           subject: 'Physics',
           difficulty: 'Medium',
+          startTime: DateTime.now().add(const Duration(days: 1)).copyWith(hour: 9, minute: 0),
+          endTime: DateTime.now().add(const Duration(days: 1)).copyWith(hour: 10, minute: 30),
         ),
         ScheduleItem(
           id: '5',
@@ -84,6 +98,8 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
           title: 'Reading Time',
           subject: 'Personal Development',
           difficulty: 'Easy',
+          startTime: DateTime.now().add(const Duration(days: 1)).copyWith(hour: 16, minute: 0),
+          endTime: DateTime.now().add(const Duration(days: 1)).copyWith(hour: 17, minute: 0),
         ),
         ScheduleItem(
           id: '6',
@@ -92,6 +108,8 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
           title: 'Chemistry Assignment',
           subject: 'Chemistry',
           difficulty: 'Hard',
+          startTime: DateTime.now().add(const Duration(days: 2)).copyWith(hour: 8, minute: 0),
+          endTime: DateTime.now().add(const Duration(days: 2)).copyWith(hour: 9, minute: 30),
         ),
         ScheduleItem(
           id: '7',
@@ -100,6 +118,8 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
           title: 'Meditation',
           subject: 'Personal Development',
           difficulty: 'Easy',
+          startTime: DateTime.now().add(const Duration(days: 2)).copyWith(hour: 15, minute: 0),
+          endTime: DateTime.now().add(const Duration(days: 2)).copyWith(hour: 16, minute: 0),
         ),
       ];
     }
@@ -248,6 +268,10 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
                             'title': item.title,
                             'subject': item.subject,
                             'difficulty': item.difficulty,
+                            'startTime': item.startTime?.toIso8601String(),
+                            'endTime': item.endTime?.toIso8601String(),
+                            'hasBreak': item.hasBreak,
+                            'breakAfterMinutes': item.breakAfterMinutes,
                           }).toList();
                           
                           // Save schedule

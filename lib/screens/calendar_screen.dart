@@ -94,11 +94,57 @@ class _CalendarScreenState extends State<CalendarScreen> {
   List<ScheduleItem> _getScheduleForDay(String dayName) {
     return _allSchedule.where((item) => item.day == dayName).toList();
   }
+  
+  // 🆕 Filter tasks by selected date
+  List<Task> _getTasksForSelectedDate() {
+    return _allTasks.where((task) {
+      if (task.deadline == null) return false;
+      
+      return task.deadline!.year == _selectedDate.year &&
+             task.deadline!.month == _selectedDate.month &&
+             task.deadline!.day == _selectedDate.day;
+    }).toList();
+  }
+
+  // 🆕 Get all days in month for calendar grid
+  List<DateTime?> _getMonthDays() {
+    final firstDayOfMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
+    final lastDayOfMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0);
+    
+    // Calculate empty cells before first day (Monday = 1, Sunday = 7)
+    final startWeekday = firstDayOfMonth.weekday;
+    final emptyDaysBefore = startWeekday - 1;
+    
+    List<DateTime?> days = [];
+    
+    // Add empty cells
+    for (int i = 0; i < emptyDaysBefore; i++) {
+      days.add(null);
+    }
+    
+    // Add actual days
+    for (int day = 1; day <= lastDayOfMonth.day; day++) {
+      days.add(DateTime(_selectedDate.year, _selectedDate.month, day));
+    }
+    
+    return days;
+  }
+  
+  // 🆕 Check if date has tasks
+  bool _hasTasksOnDate(DateTime date) {
+    return _allTasks.any((task) {
+      if (task.deadline == null) return false;
+      return task.deadline!.year == date.year &&
+             task.deadline!.month == date.month &&
+             task.deadline!.day == date.day;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final selectedDayName = _getDayName(_selectedDate);
     final scheduleForDay = _getScheduleForDay(selectedDayName);
+    final tasksForDay = _getTasksForSelectedDate();
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -147,141 +193,283 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
           const SizedBox(height: AppSpacing.md),
           
-          // Week Days
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: AppColors.cardBackground,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              boxShadow: AppShadows.card,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(7, (index) {
-                final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-                final today = DateTime.now();
-                final dayDate = today.subtract(Duration(days: today.weekday - 1 - index));
-                final isSelected = dayDate.day == _selectedDate.day &&
-                    dayDate.month == _selectedDate.month;
-                final isToday = dayDate.day == today.day && dayDate.month == today.month;
-                
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedDate = dayDate;
-                    });
-                  },
-                  child: Container(
-                    width: 40,
-                    height: 60,
+          // Scrollable content area
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Month Calendar Grid - 🔧 Full calendar view
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
                     decoration: BoxDecoration(
-                      color: isSelected ? AppColors.primary : Colors.transparent,
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      color: AppColors.cardBackground,
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      boxShadow: AppShadows.card,
                     ),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          days[index],
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
+                        // Week day headers
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day) {
+                            return SizedBox(
+                              width: 40,
+                              child: Center(
+                                child: Text(
+                                  day,
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${dayDate.day}',
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : AppColors.textPrimary,
-                            fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                        const SizedBox(height: AppSpacing.sm),
+                        
+                        // Calendar grid
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 7,
+                            childAspectRatio: 1,
+                            crossAxisSpacing: 4,
+                            mainAxisSpacing: 4,
                           ),
+                          itemCount: _getMonthDays().length,
+                          itemBuilder: (context, index) {
+                            final dayDate = _getMonthDays()[index];
+                            
+                            if (dayDate == null) {
+                              return const SizedBox.shrink();
+                            }
+                            
+                            final today = DateTime.now();
+                            final isSelected = dayDate.day == _selectedDate.day &&
+                                dayDate.month == _selectedDate.month &&
+                                dayDate.year == _selectedDate.year;
+                            final isToday = dayDate.day == today.day &&
+                                dayDate.month == today.month &&
+                                dayDate.year == today.year;
+                            final hasTasks = _hasTasksOnDate(dayDate);
+                            
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedDate = dayDate;
+                                });
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: isSelected ? AppColors.primary : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                                  border: isToday && !isSelected
+                                      ? Border.all(color: AppColors.primary, width: 2)
+                                      : null,
+                                ),
+                                child: Stack(
+                                  children: [
+                                    Center(
+                                      child: Text(
+                                        '${dayDate.day}',
+                                        style: TextStyle(
+                                          color: isSelected
+                                              ? Colors.white
+                                              : AppColors.textPrimary,
+                                          fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                    if (hasTasks && !isSelected)
+                                      Positioned(
+                                        bottom: 4,
+                                        left: 0,
+                                        right: 0,
+                                        child: Center(
+                                          child: Container(
+                                            width: 4,
+                                            height: 4,
+                                            decoration: BoxDecoration(
+                                              color: AppColors.success,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
                   ),
-                );
-              }),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
+                  const SizedBox(height: AppSpacing.lg),
           
-          // Selected Day Info
-          Text(
-            '$selectedDayName, ${_selectedDate.day} ${_getMonthName(_selectedDate.month)}',
-            style: AppTextStyles.heading2,
-          ),
-          const SizedBox(height: AppSpacing.md),
+                  // Selected Day Info
+                  Text(
+                    '$selectedDayName, ${_selectedDate.day} ${_getMonthName(_selectedDate.month)}',
+                    style: AppTextStyles.heading2,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
           
-          // Tasks and Schedule
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : scheduleForDay.isEmpty && _allTasks.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.event_available,
-                              size: 64,
-                              color: AppColors.textSecondary.withOpacity(0.5),
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            Text(
-                              'No tasks for this day',
-                              style: AppTextStyles.body.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView(
-                        children: [
-                          if (scheduleForDay.isNotEmpty) ...[
-                            const Text(
-                              'Schedule',
-                              style: AppTextStyles.heading3,
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            ...scheduleForDay.map((item) => Padding(
-                              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                              child: ScheduleCard(scheduleItem: item),
-                            )),
-                            const SizedBox(height: AppSpacing.md),
-                          ],
-                          if (_allTasks.isNotEmpty) ...[
-                            const Text(
-                              'All Tasks',
-                              style: AppTextStyles.heading3,
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            ..._allTasks.asMap().entries.map((entry) {
-                              final index = entry.key;
-                              final task = entry.value;
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                                child: TaskCard(
-                                  task: task,
-                                  onCheckboxChanged: (value) async {
-                                    final updatedTask = task.copyWith(isCompleted: value ?? false);
-                                    setState(() {
-                                      _allTasks[index] = updatedTask;
-                                    });
-                                    
-                                    final customTasks = await _storage.getCustomTasks();
-                                    final taskIndex = customTasks.indexWhere((t) => t['id'] == task.id);
-                                    if (taskIndex != -1) {
-                                      customTasks[taskIndex]['isCompleted'] = updatedTask.isCompleted;
-                                      await _storage.saveCustomTasks(customTasks);
-                                    }
-                                  },
+                  // Tasks and Schedule - 🔧 Fixed to filter by selected date
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : scheduleForDay.isEmpty && tasksForDay.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(AppSpacing.xl),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.event_available,
+                                      size: 64,
+                                      color: AppColors.textSecondary.withOpacity(0.5),
+                                    ),
+                                    const SizedBox(height: AppSpacing.md),
+                                    Text(
+                                      'No tasks for this day',
+                                      style: AppTextStyles.body.copyWith(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.sm),
+                                    Text(
+                                      'Tap + to add a new task',
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              );
-                            }),
-                          ],
-                        ],
-                      ),
+                              ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (scheduleForDay.isNotEmpty) ...[
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 4,
+                                        height: 20,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary,
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                      ),
+                                      const SizedBox(width: AppSpacing.sm),
+                                      const Text(
+                                        'Schedule',
+                                        style: AppTextStyles.heading3,
+                                      ),
+                                      const SizedBox(width: AppSpacing.sm),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          '${scheduleForDay.length}',
+                                          style: TextStyle(
+                                            color: AppColors.primary,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  ...scheduleForDay.map((item) => Padding(
+                                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                                    child: ScheduleCard(scheduleItem: item),
+                                  )),
+                                  const SizedBox(height: AppSpacing.lg),
+                                ],
+                                if (tasksForDay.isNotEmpty) ...[
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 4,
+                                        height: 20,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.success,
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                      ),
+                                      const SizedBox(width: AppSpacing.sm),
+                                      const Text(
+                                        'Tasks',
+                                        style: AppTextStyles.heading3,
+                                      ),
+                                      const SizedBox(width: AppSpacing.sm),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.success.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          '${tasksForDay.length}',
+                                          style: TextStyle(
+                                            color: AppColors.success,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  ...tasksForDay.asMap().entries.map((entry) {
+                                    final index = entry.key;
+                                    final task = entry.value;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                                      child: TaskCard(
+                                        task: task,
+                                        onCheckboxChanged: (value) async {
+                                          final updatedTask = task.copyWith(isCompleted: value ?? false);
+                                          setState(() {
+                                            final allTasksIndex = _allTasks.indexWhere((t) => t.id == task.id);
+                                            if (allTasksIndex != -1) {
+                                              _allTasks[allTasksIndex] = updatedTask;
+                                            }
+                                          });
+                                          
+                                          final customTasks = await _storage.getCustomTasks();
+                                          final taskIndex = customTasks.indexWhere((t) => t['id'] == task.id);
+                                          if (taskIndex != -1) {
+                                            customTasks[taskIndex]['isCompleted'] = updatedTask.isCompleted;
+                                            await _storage.saveCustomTasks(customTasks);
+                                          }
+                                        },
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ],
+                            ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
