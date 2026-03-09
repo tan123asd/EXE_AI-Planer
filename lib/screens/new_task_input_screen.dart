@@ -30,6 +30,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   TimeOfDay? _deadlineTime;
   TimeOfDay? _scheduleStartTime; // 🆕 For Schedules only
   TimeOfDay? _scheduleEndTime; // 🆕 For Schedules only
+  DateTime? _scheduleEndDate; // 🆕 End date for recurring schedules
   Set<int> _selectedWeekdays = {}; // 🆕 For recurring schedules (1=Monday, 7=Sunday)
   String _category = 'Study'; // 🔧 Single category instead of set
   String _notes = '';
@@ -578,6 +579,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         'weekdays': _selectedWeekdays.toList(),
         'startTime': '${_scheduleStartTime!.hour.toString().padLeft(2, '0')}:${_scheduleStartTime!.minute.toString().padLeft(2, '0')}',
         'endTime': '${_scheduleEndTime!.hour.toString().padLeft(2, '0')}:${_scheduleEndTime!.minute.toString().padLeft(2, '0')}',
+        'scheduleEndDate': _scheduleEndDate?.toIso8601String(), // 🆕 Optional end date
         'notes': _notes,
         'createdAt': DateTime.now().toIso8601String(),
       };
@@ -1108,6 +1110,113 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     color: AppColors.textSecondary,
                                     size: 14,
                                   ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // 🆕 End Date for Schedule
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('End Date (Optional)', Icons.event_busy_outlined),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Schedule will stop repeating after this date',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary.withOpacity(0.7),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          InkWell(
+                            onTap: () async {
+                              final DateTime? picked = await showDatePicker(
+                                context: context,
+                                initialDate: _scheduleEndDate ?? DateTime.now().add(const Duration(days: 30)),
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now().add(const Duration(days: 365)),
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: Theme.of(context).copyWith(
+                                      colorScheme: ColorScheme.light(
+                                        primary: AppColors.primary,
+                                        onPrimary: Colors.white,
+                                        surface: Colors.white,
+                                        onSurface: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (picked != null) {
+                                setState(() {
+                                  _scheduleEndDate = picked;
+                                });
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _scheduleEndDate != null
+                                      ? AppColors.primary.withOpacity(0.3)
+                                      : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.event,
+                                    color: _scheduleEndDate != null
+                                        ? AppColors.primary
+                                        : AppColors.textSecondary,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _scheduleEndDate != null
+                                          ? DateFormat('d MMM yyyy').format(_scheduleEndDate!)
+                                          : 'No end date (runs forever)',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                        color: _scheduleEndDate != null
+                                            ? AppColors.textPrimary
+                                            : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_scheduleEndDate != null)
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 18),
+                                      color: AppColors.textSecondary,
+                                      onPressed: () {
+                                        setState(() {
+                                          _scheduleEndDate = null;
+                                        });
+                                      },
+                                    )
+                                  else
+                                    Icon(
+                                      Icons.arrow_forward_ios,
+                                      color: AppColors.textSecondary,
+                                      size: 14,
+                                    ),
                                 ],
                               ),
                             ),

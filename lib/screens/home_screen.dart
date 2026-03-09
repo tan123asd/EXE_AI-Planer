@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/task.dart';
 import '../utils/constants.dart';
 import '../widgets/ai_coach_card.dart';
@@ -54,10 +55,27 @@ class _HomeScreenState extends State<HomeScreen> {
         // Schedules: check if today's weekday is in the weekdays list
         if (task['taskType'] == 'Schedules') {
           final weekdays = task['weekdays'];
-          if (weekdays != null && weekdays is List) {
-            return weekdays.contains(today.weekday);
+          if (weekdays == null || weekdays is! List) return false;
+          
+          // Check if today's weekday matches
+          if (!weekdays.contains(today.weekday)) return false;
+          
+          // 🆕 Check if schedule has ended (endDate check)
+          final scheduleEndDate = task['scheduleEndDate'];
+          if (scheduleEndDate != null) {
+            try {
+              final endDate = DateTime.parse(scheduleEndDate);
+              final endDateOnly = DateTime(endDate.year, endDate.month, endDate.day);
+              // If today is after end date, don't show this schedule
+              if (todayDate.isAfter(endDateOnly)) {
+                return false;
+              }
+            } catch (e) {
+              // If parsing fails, assume no end date
+            }
           }
-          return false;
+          
+          return true;
         }
         
         // Task: check if has session today OR deadline is today
@@ -292,6 +310,24 @@ class _HomeScreenState extends State<HomeScreen> {
     
     daysList.sort();
     return daysList.map((d) => days[d - 1]).join(', ');
+  }
+
+  String _formatScheduleSubtitle(Map<String, dynamic> schedule) {
+    String weekdaysStr = _formatWeekdays(schedule['weekdays']);
+    
+    final scheduleEndDate = schedule['scheduleEndDate'];
+    if (scheduleEndDate != null) {
+      try {
+        final endDate = DateTime.parse(scheduleEndDate);
+        final formattedDate = DateFormat('MMM d, y').format(endDate);
+        return '$weekdaysStr • Until $formattedDate';
+      } catch (e) {
+        // If parsing fails, just return weekdays
+        return weekdaysStr;
+      }
+    }
+    
+    return weekdaysStr;
   }
 
   Widget _buildHomeContent() {
@@ -557,7 +593,7 @@ class _HomeScreenState extends State<HomeScreen> {
               for (var task in _todayTasks.where((t) => t['taskType'] == 'Schedules')) ...[
                 PriorityTaskCard(
                   title: task['name'] ?? 'Untitled Schedule',
-                  subtitle: _formatWeekdays(task['weekdays']),
+                  subtitle: _formatScheduleSubtitle(task),
                   bestSlot: _formatTimeRange(task),
                   priority: 'Schedule', // Changed from difficulty
                   onTap: () {
