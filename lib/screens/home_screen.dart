@@ -778,11 +778,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   subject: _getSubjectLabel(task),
                   accentColor: _getSubjectColor(task),
                   priority: 'Schedule', // Changed from difficulty
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Starting ${task['name']}...')),
-                    );
-                  },
+                  onTap: null,
                 ),
               ],
             ],
