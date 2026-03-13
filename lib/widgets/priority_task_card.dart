@@ -6,6 +6,8 @@ class PriorityTaskCard extends StatelessWidget {
   final String subtitle;
   final String bestSlot;
   final String priority;
+  final String subject;
+  final Color? accentColor;
   final VoidCallback? onTap;
 
   const PriorityTaskCard({
@@ -14,10 +16,16 @@ class PriorityTaskCard extends StatelessWidget {
     required this.subtitle,
     required this.bestSlot,
     required this.priority,
+    this.subject = 'Other',
+    this.accentColor,
     this.onTap,
   }) : super(key: key);
 
   Color _getPriorityColor() {
+    if (accentColor != null) {
+      return accentColor!;
+    }
+
     switch (priority.toLowerCase()) {
       case 'high':
         return AppColors.danger;
@@ -76,13 +84,14 @@ class PriorityTaskCard extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(16),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Left: Icon with gradient background
                   Container(
-                    width: 56,
-                    height: 56,
+                    width: 52,
+                    height: 52,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
@@ -97,18 +106,20 @@ class PriorityTaskCard extends StatelessWidget {
                     child: Icon(
                       _getScheduleIcon(),
                       color: _getPriorityColor(),
-                      size: 28,
+                      size: 24,
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   
                   // Middle: Content
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         // Title + Badge
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
                               child: Text(
@@ -119,15 +130,15 @@ class PriorityTaskCard extends StatelessWidget {
                                   color: AppColors.textPrimary,
                                   letterSpacing: -0.3,
                                 ),
-                                maxLines: 1,
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 10),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
+                                horizontal: 8,
+                                vertical: 5,
                               ),
                               decoration: BoxDecoration(
                                 color: _getPriorityColor(),
@@ -152,10 +163,31 @@ class PriorityTaskCard extends StatelessWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.bookmark_rounded,
+                              size: 13,
+                              color: _getPriorityColor(),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              subject,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _getPriorityColor(),
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
                         
                         // Weekdays row
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Icon(
                               Icons.calendar_today_rounded,
@@ -178,27 +210,34 @@ class PriorityTaskCard extends StatelessWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
                         
                         // Time slot
-                        Row(
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 6,
                           children: [
-                            Icon(
-                              Icons.access_time_rounded,
-                              size: 13,
-                              color: _getPriorityColor().withOpacity(0.8),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.access_time_rounded,
+                                  size: 13,
+                                  color: _getPriorityColor().withOpacity(0.8),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  bestSlot,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _getPriorityColor(),
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              bestSlot,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: _getPriorityColor(),
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
@@ -220,62 +259,6 @@ class PriorityTaskCard extends StatelessWidget {
                           ],
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  
-                  // Right: Action button
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          _getPriorityColor(),
-                          _getPriorityColor().withOpacity(0.85),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _getPriorityColor().withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: onTap,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Text(
-                                'Start',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  letterSpacing: 0.3,
-                                ),
-                              ),
-                              SizedBox(width: 4),
-                              Icon(
-                                Icons.arrow_forward_rounded,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                     ),
                   ),
                 ],

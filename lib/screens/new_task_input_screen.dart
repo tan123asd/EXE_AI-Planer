@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
-import 'dart:math';
 import 'package:intl/intl.dart';
 
 class NewTaskInputScreen extends StatefulWidget {
@@ -38,13 +37,14 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   bool _showCustomTime = false;
   bool _showAIPreview = false;
   bool _isGenerating = false;
+  bool _isDeadlineManuallySet = false;
   int? _selectedSuggestionIndex;
   
   // AI Preview data
   String _aiEstimatedEffort = '';
   List<String> _aiSuggestedSlots = [];
   List<DateTime> _aiSuggestedStartTimes = [];
-  List<Map<String, dynamic>> _aiSuggestedSessions = []; // 🆕 Full session data
+  List<List<Map<String, dynamic>>> _aiSuggestedSessionGroups = [];
 
   final List<String> _difficulties = ['Easy', 'Medium', 'Hard'];
   final List<String> _taskTypes = ['Task', 'Schedules']; // 🔧 Changed from priorities
@@ -128,6 +128,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         setState(() {
           _deadline = pickedDate;
           _deadlineTime = pickedTime;
+          _isDeadlineManuallySet = true;
           _selectedSuggestionIndex = null; // 🔧 Reset selection since user manually picked time
         });
       }
@@ -140,9 +141,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     String errorMessage = '';
     
     if (_taskType == 'Task') {
-      // Task validation: needs deadline
-      isValid = _formKey.currentState!.validate() && _deadline != null;
-      errorMessage = 'Please fill in task name and deadline';
+      // Task validation: task title is enough to generate suggestions.
+      isValid = _formKey.currentState!.validate();
+      errorMessage = 'Please fill in task name';
     } else {
       // Schedules validation: needs weekdays and start/end time
       isValid = _formKey.currentState!.validate() && 
@@ -150,6 +151,11 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                 _scheduleStartTime != null && 
                 _scheduleEndTime != null;
       errorMessage = 'Please fill in task name, dates, and time range';
+
+      if (isValid && !_isValidScheduleTimeRange(_scheduleStartTime!, _scheduleEndTime!)) {
+        isValid = false;
+        errorMessage = 'End time must be after start time';
+      }
     }
     
     if (isValid) {
@@ -165,28 +171,14 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       // 🔧 Different logic for Task vs Schedules
       if (_taskType == 'Task') {
         // === AI ESTIMATE FOR TASK ===
-        // Generate AI estimate
-        final random = Random();
-        int totalHours = 1;
-      
-      if (_estimatedTime.contains('30 min')) {
-        totalHours = 1;
-      } else if (_estimatedTime.contains('1 hour')) {
-        totalHours = 1;
-      } else if (_estimatedTime.contains('2 hours')) {
-        totalHours = 2;
-      } else if (_estimatedTime.contains('3 hours')) {
-        totalHours = 3;
-      } else if (_showCustomTime && _customTimeController.text.isNotEmpty) {
-        totalHours = int.tryParse(_customTimeController.text) ?? 2;
-      }
-      
-      // Adjust based on difficulty
-      if (_difficulty == 'Hard') {
-        totalHours = (totalHours * 1.5).ceil();
-      } else if (_difficulty == 'Easy') {
-        totalHours = (totalHours * 0.8).ceil();
-      }
+        int totalMinutes = _getBaseEstimatedMinutes();
+
+        // Adjust based on difficulty.
+        if (_difficulty == 'Hard') {
+          totalMinutes = (totalMinutes * 1.5).round();
+        } else if (_difficulty == 'Easy') {
+          totalMinutes = (totalMinutes * 0.8).round();
+        }
       
       // 🆕 Apply historical performance data to improve estimates
       final accuracy = _storage.getEstimateAccuracy();
@@ -194,136 +186,166 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         final avgAccuracy = accuracy['averageAccuracy'];
         if (avgAccuracy < 80) {
           // User tends to underestimate, increase time
-          totalHours = (totalHours * 1.2).ceil();
+          totalMinutes = (totalMinutes * 1.2).round();
         }
       }
-      
-      _aiEstimatedEffort = '$totalHours hour${totalHours > 1 ? 's' : ''}';
+
+      // Round to 30-minute blocks for cleaner suggestions.
+      totalMinutes = ((totalMinutes + 15) ~/ 30) * 30;
+      if (totalMinutes < 30) {
+        totalMinutes = 30;
+      }
+
+      _aiEstimatedEffort = _formatEstimatedEffort(totalMinutes);
       
       // 🆕 Get break settings
       final breakSettings = _storage.getBreakSettings();
-      final needsBreaks = totalHours > 1 && breakSettings['enabled'];
+      final needsBreaks = totalMinutes > 60 && breakSettings['enabled'];
       
       // Generate suggested time slots with conflict detection
       _aiSuggestedSlots = [];
       _aiSuggestedStartTimes = []; // 🔧 Clear start times array
-      _aiSuggestedSessions = []; // 🔧 Clear sessions array
+      _aiSuggestedSessionGroups = []; // 🔧 Clear grouped sessions
       final now = DateTime.now();
+      const maxSuggestions = 3;
       
-      if (totalHours <= 2) {
-        // Single session
-        final durationMinutes = totalHours * 60;
-        DateTime? slotStart;
-        
-        // 🆕 IMPROVED: Find available slot starting from now
-        slotStart = _storage.findNextAvailableSlot(durationMinutes, now);
-        
-        if (slotStart != null) {
+      if (totalMinutes <= 120) {
+        // Single-session suggestions: provide multiple alternatives.
+        final durationMinutes = totalMinutes;
+        final usedSlots = <Map<String, DateTime>>[];
+
+        for (int i = 0; i < maxSuggestions; i++) {
+          final searchFrom = now.add(Duration(minutes: i * 30));
+          final slotStart = _findNextAvailableSlotWithTracking(
+            durationMinutes,
+            searchFrom,
+            usedSlots,
+          );
+
+          if (slotStart == null) {
+            continue;
+          }
+
           final slotEnd = slotStart.add(Duration(minutes: durationMinutes));
-          
-          // 🔧 Save start time for later use
+          usedSlots.add({'start': slotStart, 'end': slotEnd});
+
           _aiSuggestedStartTimes.add(slotStart);
-          
-          // 🆕 Save full session data
-          _aiSuggestedSessions.add({
-            'startTime': slotStart.toIso8601String(),
-            'endTime': slotEnd.toIso8601String(),
-            'duration': durationMinutes,
-          });
-          
-          // 🆕 Format with AM/PM
+          _aiSuggestedSessionGroups.add([
+            {
+              'startTime': slotStart.toIso8601String(),
+              'endTime': slotEnd.toIso8601String(),
+              'duration': durationMinutes,
+            }
+          ]);
+
           String slotText = '${DateFormat('EEEE, MMM d').format(slotStart)} • '
-              '${_formatTimeWithAMPM(slotStart)} – ${_formatTimeWithAMPM(slotEnd)}';
-          
-          // 🆕 Add break reminder if needed
+              '${_formatTimeWith24H(slotStart)} – ${_formatTimeWith24H(slotEnd, isRangeEnd: true)}';
+
           if (needsBreaks) {
             final workDuration = breakSettings['workDuration'];
             slotText += '\n⏱️ Break after ${workDuration}min';
           }
-          
+
           _aiSuggestedSlots.add(slotText);
-        } else {
+        }
+
+        if (_aiSuggestedSlots.isEmpty) {
           _aiSuggestedSlots.add('⚠️ No available slots found in next 7 days');
         }
       } else {
-        // Split into multiple sessions
-        int remainingHours = totalHours;
-        int sessionCount = 0;
-        DateTime searchFrom = now;
-        
-        // 🔧 FIX: Track suggested slots to avoid duplicates
-        List<Map<String, DateTime>> suggestedSlots = [];
-        
-        while (remainingHours > 0 && sessionCount < 5) {
-          final sessionHours = remainingHours > 2 ? 2 : remainingHours;
-          final sessionMinutes = sessionHours * 60;
-          
-          // 🔧 FIX: Find available slot that doesn't conflict with already suggested slots
-          DateTime? slotStart = _findNextAvailableSlotWithTracking(
-            sessionMinutes,
-            searchFrom,
-            suggestedSlots,
-          );
-          
-          if (slotStart != null) {
+        // Multi-session suggestions: generate multiple full plans (e.g. 7h -> 2h+2h+2h+1h).
+        int remaining = totalMinutes;
+        final sessionMinutesPlan = <int>[];
+        while (remaining > 0) {
+          final chunk = remaining > 120 ? 120 : remaining;
+          sessionMinutesPlan.add(chunk);
+          remaining -= chunk;
+        }
+
+        for (int optionIndex = 0; optionIndex < maxSuggestions; optionIndex++) {
+          DateTime searchFrom = now.add(Duration(hours: optionIndex));
+          final optionSlots = <Map<String, DateTime>>[];
+          final optionSessions = <Map<String, dynamic>>[];
+          final optionLines = <String>[];
+          bool validOption = true;
+
+          for (int sessionIndex = 0; sessionIndex < sessionMinutesPlan.length; sessionIndex++) {
+            final sessionMinutes = sessionMinutesPlan[sessionIndex];
+            final slotStart = _findNextAvailableSlotWithTracking(
+              sessionMinutes,
+              searchFrom,
+              optionSlots,
+            );
+
+            if (slotStart == null) {
+              validOption = false;
+              break;
+            }
+
             final slotEnd = slotStart.add(Duration(minutes: sessionMinutes));
-            
-            // 🔧 FIX: Add to tracking list
-            suggestedSlots.add({'start': slotStart, 'end': slotEnd});
-            
-            // 🔧 Save start time for later use
-            _aiSuggestedStartTimes.add(slotStart);
-            
-            // 🆕 Save full session data
-            _aiSuggestedSessions.add({
+            optionSlots.add({'start': slotStart, 'end': slotEnd});
+            optionSessions.add({
               'startTime': slotStart.toIso8601String(),
               'endTime': slotEnd.toIso8601String(),
               'duration': sessionMinutes,
             });
-            
-            // 🆕 Format with AM/PM
-            String slotText = '${DateFormat('EEEE, MMM d').format(slotStart)} • '
-                '${_formatTimeWithAMPM(slotStart)} – ${_formatTimeWithAMPM(slotEnd)} '
-                '(Session ${sessionCount + 1})';
-            
-            // 🆕 Add break reminder
-            if (needsBreaks) {
-              final workDuration = breakSettings['workDuration'];
-              final breakDuration = breakSettings['breakDuration'];
-              slotText += '\n⏱️ ${workDuration}min work / ${breakDuration}min break';
-            }
-            
-            _aiSuggestedSlots.add(slotText);
-            
-            // 🔧 FIX: Search for next session at least 2 hours after this one starts
-            // This ensures sessions are spread out, not overlapping
-            searchFrom = slotStart.add(Duration(hours: 2, minutes: 30));
-          } else {
-            break; // No more slots available
+
+            optionLines.add(
+              'S${sessionIndex + 1}: ${DateFormat('EEE d').format(slotStart)} '
+              '${_formatTimeWith24H(slotStart)}-${_formatTimeWith24H(slotEnd, isRangeEnd: true)}',
+            );
+
+            searchFrom = slotStart.add(const Duration(hours: 2, minutes: 30));
           }
-          
-          remainingHours -= sessionHours;
-          sessionCount++;
+
+          if (!validOption || optionSessions.isEmpty) {
+            continue;
+          }
+
+          _aiSuggestedStartTimes.add(optionSlots.first['start']!);
+          _aiSuggestedSessionGroups.add(optionSessions);
+
+          String optionText = 'Option ${optionIndex + 1} • ${optionSessions.length} sessions\n${optionLines.join('\n')}';
+          if (needsBreaks) {
+            final workDuration = breakSettings['workDuration'];
+            final breakDuration = breakSettings['breakDuration'];
+            optionText += '\n⏱️ ${workDuration}min work / ${breakDuration}min break';
+          }
+
+          _aiSuggestedSlots.add(optionText);
         }
-        
+
         if (_aiSuggestedSlots.isEmpty) {
           _aiSuggestedSlots.add('⚠️ Schedule is too busy, consider rescheduling other tasks');
         }
+      }
+
+      if (_aiSuggestedStartTimes.isNotEmpty) {
+        final defaultStart = _aiSuggestedStartTimes.first;
+        _selectedSuggestionIndex = 0;
+
+        // Keep manually entered deadline/time; auto-fill only when deadline is not manually set.
+        if (!_isDeadlineManuallySet && (_deadline == null || _deadlineTime == null)) {
+          _deadline = DateTime(defaultStart.year, defaultStart.month, defaultStart.day);
+          _deadlineTime = TimeOfDay(hour: defaultStart.hour, minute: defaultStart.minute);
+        }
+      } else {
+        _selectedSuggestionIndex = null;
       }
       } else {
         // === PREVIEW FOR SCHEDULES ===
         _aiSuggestedSlots = [];
         _aiSuggestedStartTimes = [];
-        _aiSuggestedSessions = [];
+        _aiSuggestedSessionGroups = [];
         
         // Format weekdays
         final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         final weekdaysList = _selectedWeekdays.toList()..sort();
         final weekdaysText = weekdaysList.map((d) => days[d - 1]).join(', ');
         
-        // Format time range
-        final startTimeText = _scheduleStartTime!.format(context);
-        final endTimeText = _scheduleEndTime!.format(context);
+        // Format time range in 24h display.
+        final startTimeText = _formatTimeOfDay24H(_scheduleStartTime!);
+        final endTimeText = _formatTimeOfDay24H(_scheduleEndTime!, isRangeEnd: true);
         
         _aiEstimatedEffort = 'Recurring schedule';
         _aiSuggestedSlots.add('📅 Every $weekdaysText\n🕐 $startTimeText – $endTimeText');
@@ -356,21 +378,95 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       );
     }
   }
+
+  int _getBaseEstimatedMinutes() {
+    if (_estimatedTime.contains('30 min')) {
+      return 30;
+    }
+    if (_estimatedTime.contains('1 hour')) {
+      return 60;
+    }
+    if (_estimatedTime.contains('2 hours')) {
+      return 120;
+    }
+    if (_estimatedTime.contains('3 hours')) {
+      return 180;
+    }
+
+    if (_showCustomTime && _customTimeController.text.isNotEmpty) {
+      final raw = _customTimeController.text.trim().replaceAll(',', '.');
+      final customHours = double.tryParse(raw);
+      if (customHours != null && customHours > 0) {
+        return (customHours * 60).round();
+      }
+    }
+
+    return 60;
+  }
+
+  String _formatEstimatedEffort(int totalMinutes) {
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours == 0) {
+      return '$minutes min';
+    }
+    if (minutes == 0) {
+      return '$hours hour${hours > 1 ? 's' : ''}';
+    }
+    return '${hours}h ${minutes}m';
+  }
+
+  int _getPreferredHour() {
+    final notes = _notesController.text.toLowerCase();
+    final hasUrgencySignal = notes.contains('urgent') ||
+        notes.contains('exam') ||
+        notes.contains('deadline') ||
+        notes.contains('asap');
+
+    if (_difficulty == 'Hard' || hasUrgencySignal) {
+      return 7;
+    }
+    if (_category == 'Health') {
+      return 6;
+    }
+    if (_category == 'Personal') {
+      return 20;
+    }
+    if (_category == 'Study') {
+      return 19;
+    }
+    return 18;
+  }
+
+  List<int> _sortHoursByPreference(List<int> hours) {
+    final preferredHour = _getPreferredHour();
+    final sorted = List<int>.from(hours);
+    sorted.sort((a, b) => (a - preferredHour).abs().compareTo((b - preferredHour).abs()));
+    return sorted;
+  }
   
-  // 🆕 Helper function to format time with AM/PM
-  String _formatTimeWithAMPM(DateTime time) {
+  // 24h formatter. If range ends at midnight, show 24:00.
+  String _formatTimeWith24H(DateTime time, {bool isRangeEnd = false}) {
+    if (isRangeEnd && time.hour == 0 && time.minute == 0) {
+      return '24:00';
+    }
+
     final hour = time.hour;
     final minute = time.minute;
-    
-    if (hour == 0) {
-      return '12:${minute.toString().padLeft(2, '0')} AM';
-    } else if (hour < 12) {
-      return '$hour:${minute.toString().padLeft(2, '0')} AM';
-    } else if (hour == 12) {
-      return '12:${minute.toString().padLeft(2, '0')} PM';
-    } else {
-      return '${hour - 12}:${minute.toString().padLeft(2, '0')} PM';
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatTimeOfDay24H(TimeOfDay time, {bool isRangeEnd = false}) {
+    if (isRangeEnd && time.hour == 0 && time.minute == 0) {
+      return '24:00';
     }
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  bool _isValidScheduleTimeRange(TimeOfDay start, TimeOfDay end) {
+    final startMinutes = start.hour * 60 + start.minute;
+    final endMinutes = end.hour * 60 + end.minute;
+    return endMinutes > startMinutes;
   }
   
   // 🔧 Helper function to find slot that doesn't conflict with already suggested slots
@@ -392,9 +488,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       
       // Define available time slots
       final isWeekday = checkDay.weekday >= 1 && checkDay.weekday <= 5;
-      List<int> availableHours = isWeekday 
+        List<int> availableHours = isWeekday 
           ? [6, 7, 18, 19, 20, 21, 22]
           : [8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+        availableHours = _sortHoursByPreference(availableHours);
       
       for (int hour in availableHours) {
         final slotStart = DateTime(
@@ -405,8 +502,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           0,
         );
         
-        // Skip if in the past
-        if (slotStart.isBefore(now)) continue;
+        // Skip if before the search boundary (respects searchFrom for multi-session planning).
+        if (slotStart.isBefore(checkTime)) continue;
         
         final slotEnd = slotStart.add(Duration(minutes: durationMinutes));
         
@@ -484,6 +581,28 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         );
         return;
       }
+
+      if (!_isValidScheduleTimeRange(_scheduleStartTime!, _scheduleEndTime!)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.warning, color: Colors.white, size: 20),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text('End time must be after start time'),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+        return;
+      }
     }
     
     // Validation for Task
@@ -513,22 +632,23 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     
     // Parse estimated time (only for Task type)
     int estimatedHours = 1;
+    int estimatedMinutes = 60;
     if (_taskType == 'Task') {
-      if (_estimatedTime.contains('30 min')) {
-        estimatedHours = 1;
-      } else if (_estimatedTime.contains('1 hour')) {
-        estimatedHours = 1;
-      } else if (_estimatedTime.contains('2 hours')) {
-        estimatedHours = 2;
-      } else if (_estimatedTime.contains('3 hours')) {
-        estimatedHours = 3;
-      } else if (_showCustomTime && _customTimeController.text.isNotEmpty) {
-        estimatedHours = int.tryParse(_customTimeController.text) ?? 2;
-      }
+      estimatedMinutes = _getBaseEstimatedMinutes();
+      estimatedHours = (estimatedMinutes / 60).ceil();
     }
     
     // 🆕 Get break settings
     final breakSettings = _storage.getBreakSettings();
+
+    final selectedGroupIndex = (_selectedSuggestionIndex != null &&
+        _selectedSuggestionIndex! >= 0 &&
+        _selectedSuggestionIndex! < _aiSuggestedSessionGroups.length)
+      ? _selectedSuggestionIndex!
+      : 0;
+    final selectedSessions = _aiSuggestedSessionGroups.isNotEmpty
+      ? _aiSuggestedSessionGroups[selectedGroupIndex]
+      : <Map<String, dynamic>>[];
     
     Map<String, dynamic> taskData;
     
@@ -549,9 +669,11 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         'id': DateTime.now().millisecondsSinceEpoch.toString(),
         'name': _taskName,
         'subject': _category,
+        'subjectColor': AppColors.subjectAccentColor(_category).toARGB32(),
         'difficulty': _difficulty,
         'deadline': finalDeadline.toIso8601String(),
         'estimatedTime': estimatedHours,
+        'estimatedMinutes': estimatedMinutes,
         'category': _category,
         'taskType': 'Task',
         'notes': _notes,
@@ -564,8 +686,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         'startedAt': null,
         'completedAt': null,
         'actualTime': null,
-        // 🆕 AI suggested sessions (for multi-session tasks)
-        'sessions': _aiSuggestedSessions.isNotEmpty ? _aiSuggestedSessions : null,
+        // AI sessions are tied to the selected suggestion option.
+        'sessions': selectedSessions.isNotEmpty ? selectedSessions : null,
       };
     } else {
       // 🔧 Schedule: has fixed start/end time + recurring weekdays
@@ -573,6 +695,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         'id': DateTime.now().millisecondsSinceEpoch.toString(),
         'name': _taskName,
         'subject': _category,
+        'subjectColor': AppColors.subjectAccentColor(_category).toARGB32(),
         'difficulty': _difficulty,
         'category': _category,
         'taskType': 'Schedules',
@@ -638,6 +761,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       default:
         return Icons.task;
     }
+  }
+
+  Color _getCategoryColor(String category) {
+    return AppColors.subjectAccentColor(category);
   }
 
   Widget _buildSectionLabel(String label, IconData icon) {
@@ -1377,12 +1504,21 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildSectionLabel('Subject', Icons.bookmark_outline),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Choose subject to auto-theme your cards on Home',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary.withOpacity(0.8),
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: _categories.map((cat) {
                             final isSelected = _category == cat;
+                            final accentColor = _getCategoryColor(cat);
                             
                             return GestureDetector(
                               onTap: () {
@@ -1398,13 +1534,13 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 ),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? AppColors.primary.withOpacity(0.1)
+                                      ? accentColor.withOpacity(0.16)
                                       : AppColors.background,
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
                                     color: isSelected
-                                        ? AppColors.primary
-                                        : Colors.transparent,
+                                        ? accentColor
+                                        : accentColor.withOpacity(0.28),
                                     width: 1.5,
                                   ),
                                 ),
@@ -1415,7 +1551,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                       _getCategoryIcon(cat),
                                       size: 16,
                                       color: isSelected
-                                          ? AppColors.primary
+                                          ? accentColor
                                           : AppColors.textSecondary,
                                     ),
                                     const SizedBox(width: 6),
@@ -1425,7 +1561,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                         fontSize: 14,
                                         fontWeight: FontWeight.w600,
                                         color: isSelected
-                                            ? AppColors.primary
+                                            ? accentColor
                                             : AppColors.textSecondary,
                                       ),
                                     ),
@@ -1568,7 +1704,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               ),
                               const SizedBox(height: 4),
                               const Text(
-                                'Tap a suggestion to set it as deadline',
+                                'Tap a suggestion to set session plan (deadline keeps your manual choice)',
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: AppColors.textSecondary,
@@ -1582,11 +1718,13 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 
                                 return GestureDetector(
                                   onTap: () {
-                                    // 🔧 Set deadline from suggestion
-                                    if (index < _aiSuggestedStartTimes.length) {
+                                    setState(() {
+                                      _selectedSuggestionIndex = index;
+                                    });
+
+                                    if (index < _aiSuggestedStartTimes.length && !_isDeadlineManuallySet) {
                                       final suggestedTime = _aiSuggestedStartTimes[index];
                                       setState(() {
-                                        _selectedSuggestionIndex = index;
                                         _deadline = DateTime(
                                           suggestedTime.year,
                                           suggestedTime.month,
@@ -1597,14 +1735,32 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                           minute: suggestedTime.minute,
                                         );
                                       });
-                                      
+
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Row(
                                             children: const [
                                               Icon(Icons.check_circle, color: Colors.white, size: 18),
                                               SizedBox(width: 8),
-                                              Text('✨ Deadline set!'),
+                                              Text('✨ Session plan selected, deadline set!'),
+                                            ],
+                                          ),
+                                          backgroundColor: AppColors.success,
+                                          duration: const Duration(seconds: 1),
+                                          behavior: SnackBarBehavior.floating,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Row(
+                                            children: const [
+                                              Icon(Icons.check_circle, color: Colors.white, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('✨ Session plan selected. Deadline unchanged.'),
                                             ],
                                           ),
                                           backgroundColor: AppColors.success,
