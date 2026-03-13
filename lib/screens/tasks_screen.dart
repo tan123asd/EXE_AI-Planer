@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
 import '../widgets/status_task_card.dart';
@@ -13,6 +14,7 @@ class TasksScreen extends StatefulWidget {
 class _TasksScreenState extends State<TasksScreen> {
   final StorageService _storage = StorageService();
   List<Map<String, dynamic>> _allTasks = [];
+  String _activeFilter = 'all';
 
   @override
   void initState() {
@@ -47,39 +49,251 @@ class _TasksScreenState extends State<TasksScreen> {
     _loadTasks();
   }
 
-  String _formatTimeRange(int estimatedHours) {
-    final startHour = 9;
-    final endHour = startHour + estimatedHours;
-    
-    // Format start time with AM/PM
-    String startFormatted;
-    if (startHour == 0) {
-      startFormatted = '12:00 AM';
-    } else if (startHour < 12) {
-      startFormatted = '$startHour:00 AM';
-    } else if (startHour == 12) {
-      startFormatted = '12:00 PM';
-    } else {
-      startFormatted = '${startHour - 12}:00 PM';
+  bool _isSchedule(Map<String, dynamic> task) {
+    return task['taskType'] == 'Schedules';
+  }
+
+  String _formatDurationMinutes(int minutes) {
+    if (minutes <= 0) {
+      return '0m';
     }
-    
-    // Format end time with AM/PM
-    String endFormatted;
-    if (endHour == 0) {
-      endFormatted = '12:00 AM';
-    } else if (endHour < 12) {
-      endFormatted = '$endHour:00 AM';
-    } else if (endHour == 12) {
-      endFormatted = '12:00 PM';
-    } else {
-      endFormatted = '${endHour - 12}:00 PM';
+
+    final hours = minutes ~/ 60;
+    final remain = minutes % 60;
+    if (hours == 0) {
+      return '${remain}m';
     }
-    
-    return '$startFormatted - $endFormatted';
+    if (remain == 0) {
+      return '${hours}h';
+    }
+    return '${hours}h ${remain}m';
+  }
+
+  int _resolveEstimatedMinutes(Map<String, dynamic> task) {
+    final estimatedMinutes = task['estimatedMinutes'];
+    if (estimatedMinutes is int && estimatedMinutes > 0) {
+      return estimatedMinutes;
+    }
+    if (estimatedMinutes is num && estimatedMinutes > 0) {
+      return estimatedMinutes.round();
+    }
+
+    final estimatedHours = task['estimatedTime'];
+    if (estimatedHours is int && estimatedHours > 0) {
+      return estimatedHours * 60;
+    }
+    if (estimatedHours is num && estimatedHours > 0) {
+      return estimatedHours.round() * 60;
+    }
+
+    return 60;
+  }
+
+  String _formatDateTimeRange(DateTime start, DateTime end) {
+    final sameDate = start.year == end.year &&
+        start.month == end.month &&
+        start.day == end.day;
+    final dayPrefix = DateFormat('dd/MM').format(start);
+    final startTime = DateFormat('HH:mm').format(start);
+    final endTime = (end.hour == 0 && end.minute == 0)
+        ? '24:00'
+        : DateFormat('HH:mm').format(end);
+
+    if (sameDate) {
+      return '$dayPrefix $startTime - $endTime';
+    }
+
+    final endPrefix = DateFormat('dd/MM').format(end);
+    return '$dayPrefix $startTime - $endPrefix $endTime';
+  }
+
+  String _formatScheduleTimeRange(Map<String, dynamic> schedule) {
+    final start = (schedule['startTime'] ?? '').toString();
+    final end = (schedule['endTime'] ?? '').toString();
+    if (start.isEmpty || end.isEmpty) {
+      return 'Not set';
+    }
+
+    if (end == '00:00') {
+      return '$start - 24:00';
+    }
+    return '$start - $end';
+  }
+
+  int _resolveScheduleMinutes(Map<String, dynamic> schedule) {
+    final start = (schedule['startTime'] ?? '').toString().split(':');
+    final end = (schedule['endTime'] ?? '').toString().split(':');
+    if (start.length != 2 || end.length != 2) {
+      return 60;
+    }
+
+    try {
+      final startMin = int.parse(start[0]) * 60 + int.parse(start[1]);
+      final endMin = int.parse(end[0]) * 60 + int.parse(end[1]);
+      final diff = endMin - startMin;
+      return diff > 0 ? diff : 60;
+    } catch (_) {
+      return 60;
+    }
+  }
+
+  String _resolveTaskTimeSlot(Map<String, dynamic> task) {
+    final sessions = task['sessions'];
+    if (sessions is List && sessions.isNotEmpty) {
+      final parsed = <Map<String, DateTime>>[];
+      for (final session in sessions) {
+        if (session is! Map<String, dynamic>) continue;
+        final start = DateTime.tryParse((session['startTime'] ?? '').toString());
+        final end = DateTime.tryParse((session['endTime'] ?? '').toString());
+        if (start != null && end != null) {
+          parsed.add({'start': start, 'end': end});
+        }
+      }
+
+      if (parsed.isNotEmpty) {
+        parsed.sort((a, b) => a['start']!.compareTo(b['start']!));
+        return _formatDateTimeRange(parsed.first['start']!, parsed.first['end']!);
+      }
+    }
+
+    final deadline = DateTime.tryParse((task['deadline'] ?? '').toString());
+    if (deadline != null && (deadline.hour != 0 || deadline.minute != 0)) {
+      final end = deadline.add(Duration(minutes: _resolveEstimatedMinutes(task)));
+      return _formatDateTimeRange(deadline, end);
+    }
+
+    return 'No specific time';
+  }
+
+  String _formatWeekdays(dynamic weekdays) {
+    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    if (weekdays is! List || weekdays.isEmpty) {
+      return 'No days set';
+    }
+
+    final items = weekdays
+        .map((e) => e is int && e >= 1 && e <= 7 ? dayNames[e - 1] : null)
+        .whereType<String>()
+        .toList();
+    if (items.isEmpty) {
+      return 'No days set';
+    }
+    return items.join(', ');
+  }
+
+  Widget _buildScheduleCard(Map<String, dynamic> schedule) {
+    final title = (schedule['name'] ?? 'Untitled Schedule').toString();
+    final subject = (schedule['subject'] ?? schedule['category'] ?? 'Other').toString();
+    final subjectColorRaw = schedule['subjectColor'];
+    final accentColor = subjectColorRaw is int
+        ? Color(subjectColorRaw)
+        : AppColors.subjectAccentColor(subject);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: accentColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: accentColor.withOpacity(0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            margin: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(color: accentColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$subject • ${_formatWeekdays(schedule['weekdays'])}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_formatScheduleTimeRange(schedule)} • ${_formatDurationMinutes(_resolveScheduleMinutes(schedule))}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: accentColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () async {
+              await _storage.deleteCustomTask((schedule['id'] ?? '').toString());
+              _loadTasks();
+            },
+            icon: const Icon(Icons.delete_outline),
+            color: AppColors.danger,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String keyName,
+    required String label,
+    required int count,
+  }) {
+    final isActive = _activeFilter == keyName;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _activeFilter = keyName;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? AppColors.primary : AppColors.textSecondary.withOpacity(0.25),
+          ),
+        ),
+        child: Text(
+          '$label ($count)',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: isActive ? Colors.white : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final tasks = _allTasks.where((task) => !_isSchedule(task)).toList();
+    final schedules = _allTasks.where(_isSchedule).toList();
+    final showTasks = _activeFilter == 'all' || _activeFilter == 'tasks';
+    final showSchedules = _activeFilter == 'all' || _activeFilter == 'schedules';
+    final hasVisibleItems = (showTasks && tasks.isNotEmpty) || (showSchedules && schedules.isNotEmpty);
+
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
@@ -107,7 +321,7 @@ class _TasksScreenState extends State<TasksScreen> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${_allTasks.length} task${_allTasks.length > 1 ? 's' : ''}',
+                    '${_allTasks.length} item${_allTasks.length > 1 ? 's' : ''}',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -117,9 +331,31 @@ class _TasksScreenState extends State<TasksScreen> {
                 ),
             ],
           ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              _buildFilterChip(
+                keyName: 'all',
+                label: 'All',
+                count: _allTasks.length,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                keyName: 'tasks',
+                label: 'Tasks',
+                count: tasks.length,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                keyName: 'schedules',
+                label: 'Schedules',
+                count: schedules.length,
+              ),
+            ],
+          ),
           const SizedBox(height: AppSpacing.lg),
           Expanded(
-            child: _allTasks.isEmpty
+            child: !hasVisibleItems
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -131,7 +367,7 @@ class _TasksScreenState extends State<TasksScreen> {
                         ),
                         const SizedBox(height: AppSpacing.lg),
                         Text(
-                          'No tasks yet',
+                          _allTasks.isEmpty ? 'No tasks yet' : 'No items in this filter',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w600,
@@ -140,7 +376,9 @@ class _TasksScreenState extends State<TasksScreen> {
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
-                          'Tap the + button to add your first task',
+                          _allTasks.isEmpty
+                              ? 'Tap the + button to add your first task'
+                              : 'Try switching filter to see other items',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 14,
@@ -150,26 +388,58 @@ class _TasksScreenState extends State<TasksScreen> {
                       ],
                     ),
                   )
-                : ListView.builder(
-                    itemCount: _allTasks.length,
-                    itemBuilder: (context, index) {
-                      final task = _allTasks[index];
-                      
-                      return StatusTaskCard(
-                        taskId: task['id'] ?? '',
-                        title: task['name'] ?? 'Untitled Task',
-                        timeSlot: _formatTimeRange(task['estimatedTime'] as int? ?? 1),
-                        duration: '${task['estimatedTime'] ?? 1}h',
-                        difficulty: task['difficulty'] ?? 'Medium',
-                        category: task['category'] ?? 'General',
-                        status: _getTaskStatus(task['id'] ?? ''),
-                        onStatusChanged: _handleTaskStatusChange,
-                        onDelete: () async {
-                          await _storage.deleteCustomTask(task['id'] ?? '');
-                          _loadTasks();
-                        },
-                      );
-                    },
+                : ListView(
+                    children: [
+                      if (showTasks && tasks.isNotEmpty) ...[
+                        const Text(
+                          'Tasks',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        ...tasks.map((task) {
+                          final subject = (task['subject'] ?? task['category'] ?? 'Other').toString();
+                          final subjectColorRaw = task['subjectColor'];
+                          final accentColor = subjectColorRaw is int
+                              ? Color(subjectColorRaw)
+                              : AppColors.subjectAccentColor(subject);
+
+                          return StatusTaskCard(
+                            taskId: (task['id'] ?? '').toString(),
+                            title: (task['name'] ?? 'Untitled Task').toString(),
+                            timeSlot: _resolveTaskTimeSlot(task),
+                            duration: _formatDurationMinutes(_resolveEstimatedMinutes(task)),
+                            difficulty: (task['difficulty'] ?? 'Medium').toString(),
+                            category: (task['category'] ?? 'General').toString(),
+                            subject: subject,
+                            accentColor: accentColor,
+                            status: _getTaskStatus((task['id'] ?? '').toString()),
+                            onStatusChanged: _handleTaskStatusChange,
+                            onDelete: () async {
+                              await _storage.deleteCustomTask((task['id'] ?? '').toString());
+                              _loadTasks();
+                            },
+                          );
+                        }),
+                      ],
+                      if (showTasks && tasks.isNotEmpty && showSchedules && schedules.isNotEmpty)
+                        const SizedBox(height: AppSpacing.md),
+                      if (showSchedules && schedules.isNotEmpty) ...[
+                        const Text(
+                          'Recurring Schedules',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        ...schedules.map(_buildScheduleCard),
+                      ],
+                    ],
                   ),
           ),
         ],

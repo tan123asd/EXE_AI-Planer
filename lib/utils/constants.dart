@@ -31,6 +31,36 @@ class AppColors {
   static const Color timelineGreen = Color(0xFFE0F5E9);
   static const Color timelinePurple = Color(0xFFEFE8F7);
   static const Color timelinePink = Color(0xFFFDE8F0);
+
+  // Subject Colors
+  static const Color subjectStudy = Color(0xFFFF6B35);
+  static const Color subjectPersonal = Color(0xFF7B61FF);
+  static const Color subjectHealth = Color(0xFF2FBF71);
+  static const Color subjectSkill = Color(0xFF3B82F6);
+  static const Color subjectOther = Color(0xFFF59E0B);
+
+  static Color subjectAccentColor(String? subject) {
+    switch ((subject ?? '').toLowerCase()) {
+      case 'study':
+        return subjectStudy;
+      case 'personal':
+        return subjectPersonal;
+      case 'health':
+        return subjectHealth;
+      case 'skill':
+        return subjectSkill;
+      default:
+        return subjectOther;
+    }
+  }
+
+  static Color subjectSurface(String? subject) {
+    return subjectAccentColor(subject).withOpacity(0.12);
+  }
+
+  static Color subjectBorder(String? subject) {
+    return subjectAccentColor(subject).withOpacity(0.35);
+  }
   
   // Stats Colors
   static const Color studyColor = Color(0xFFFF6B35);

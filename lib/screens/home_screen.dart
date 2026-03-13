@@ -161,8 +161,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final endTime = task['endTime'];
       
       if (startTime != null && endTime != null) {
-        // 🆕 Parse "HH:MM" strings and format to AM/PM
-        return '${_formatTimeStringToAMPM(startTime)} - ${_formatTimeStringToAMPM(endTime)}';
+        // Parse "HH:MM" strings and format to 24h display.
+        return '${_formatTimeStringTo24H(startTime)} - ${_formatTimeStringTo24H(endTime, isRangeEnd: true)}';
       }
     }
     
@@ -183,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
             final sessionDate = DateTime(sessionStart.year, sessionStart.month, sessionStart.day);
             
             if (sessionDate.isAtSameMomentAs(todayDate)) {
-              return '${_formatTimeWithAMPM(sessionStart)} - ${_formatTimeWithAMPM(sessionEnd)}';
+              return '${_formatTimeWith24H(sessionStart)} - ${_formatTimeWith24H(sessionEnd, isRangeEnd: true)}';
             }
           } catch (e) {
             // Continue to next session
@@ -208,7 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // If task has specific time (not midnight), use it
       if (taskStartTime != null && (taskStartTime.hour != 0 || taskStartTime.minute != 0)) {
         final endTime = taskStartTime.add(Duration(minutes: durationMinutes));
-        return '${_formatTimeWithAMPM(taskStartTime)} - ${_formatTimeWithAMPM(endTime)}';
+        return '${_formatTimeWith24H(taskStartTime)} - ${_formatTimeWith24H(endTime, isRangeEnd: true)}';
       }
       
       // Otherwise, use default scheduling (9 AM start + index offset)
@@ -219,41 +219,38 @@ class _HomeScreenState extends State<HomeScreen> {
       final startTime = DateTime(2026, 1, 1, startHour, 0);
       final endTime = DateTime(2026, 1, 1, endHour, 0);
       
-      return '${_formatTimeWithAMPM(startTime)} - ${_formatTimeWithAMPM(endTime)}';
+      return '${_formatTimeWith24H(startTime)} - ${_formatTimeWith24H(endTime, isRangeEnd: true)}';
     }
     
     // Default fallback
-    return '9:00 AM - 10:00 AM';
+    return '09:00 - 10:00';
   }
   
-  // 🆕 Helper to format time with AM/PM
-  String _formatTimeWithAMPM(DateTime time) {
+  // 24h formatter. If range ends at midnight, show 24:00 for easier day planning.
+  String _formatTimeWith24H(DateTime time, {bool isRangeEnd = false}) {
+    if (isRangeEnd && time.hour == 0 && time.minute == 0) {
+      return '24:00';
+    }
+
     final hour = time.hour;
     final minute = time.minute;
-    
-    if (hour == 0) {
-      return '12:${minute.toString().padLeft(2, '0')} AM';
-    } else if (hour < 12) {
-      return '$hour:${minute.toString().padLeft(2, '0')} AM';
-    } else if (hour == 12) {
-      return '12:${minute.toString().padLeft(2, '0')} PM';
-    } else {
-      return '${hour - 12}:${minute.toString().padLeft(2, '0')} PM';
-    }
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
   
-  // 🆕 Helper to parse "HH:MM" string and format to AM/PM
-  String _formatTimeStringToAMPM(String timeString) {
+  // Parse "HH:MM" and keep 24h display. End of day can be displayed as 24:00.
+  String _formatTimeStringTo24H(String timeString, {bool isRangeEnd = false}) {
     try {
       final parts = timeString.split(':');
       if (parts.length != 2) return timeString;
       
       final hour = int.parse(parts[0]);
       final minute = int.parse(parts[1]);
-      
-      // Create dummy DateTime to use existing formatter
-      final dummyDate = DateTime(2026, 1, 1, hour, minute);
-      return _formatTimeWithAMPM(dummyDate);
+
+      if (isRangeEnd && hour == 0 && minute == 0) {
+        return '24:00';
+      }
+
+      return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
     } catch (e) {
       return timeString; // Return original if parsing fails
     }
@@ -330,6 +327,178 @@ class _HomeScreenState extends State<HomeScreen> {
     return weekdaysStr;
   }
 
+  String _getSubjectLabel(Map<String, dynamic> task) {
+    final subject = task['subject'];
+    if (subject is String && subject.trim().isNotEmpty) {
+      return subject;
+    }
+
+    final category = task['category'];
+    if (category is String && category.trim().isNotEmpty) {
+      return category;
+    }
+
+    return 'Other';
+  }
+
+  Color _getSubjectColor(Map<String, dynamic> task) {
+    final raw = task['subjectColor'];
+    if (raw is int) {
+      return Color(raw);
+    }
+    if (raw is num) {
+      return Color(raw.toInt());
+    }
+    return AppColors.subjectAccentColor(_getSubjectLabel(task));
+  }
+
+  int _getTaskMinutes(Map<String, dynamic> task) {
+    if (task['taskType'] == 'Schedules') {
+      final start = task['startTime'];
+      final end = task['endTime'];
+      if (start is String && end is String) {
+        try {
+          final startParts = start.split(':');
+          final endParts = end.split(':');
+          if (startParts.length == 2 && endParts.length == 2) {
+            final startMinutes = (int.parse(startParts[0]) * 60) + int.parse(startParts[1]);
+            final endMinutes = (int.parse(endParts[0]) * 60) + int.parse(endParts[1]);
+            final duration = endMinutes - startMinutes;
+            if (duration > 0) {
+              return duration;
+            }
+          }
+        } catch (e) {
+          // Fall through to default duration.
+        }
+      }
+      return 60;
+    }
+
+    final estimatedHours = task['estimatedTime'];
+    if (estimatedHours is int && estimatedHours > 0) {
+      return estimatedHours * 60;
+    }
+    if (estimatedHours is num && estimatedHours > 0) {
+      return estimatedHours.round() * 60;
+    }
+
+    return 60;
+  }
+
+  List<Map<String, dynamic>> _getSubjectBreakdown() {
+    final Map<String, int> subjectMinutes = {};
+    final Map<String, Color> subjectColors = {};
+
+    for (final task in _todayTasks) {
+      final subject = _getSubjectLabel(task);
+      subjectMinutes[subject] = (subjectMinutes[subject] ?? 0) + _getTaskMinutes(task);
+      subjectColors[subject] = _getSubjectColor(task);
+    }
+
+    final totalMinutes = subjectMinutes.values.fold<int>(0, (sum, value) => sum + value);
+    if (totalMinutes == 0) {
+      return [];
+    }
+
+    final breakdown = subjectMinutes.entries.map((entry) {
+      final percent = ((entry.value / totalMinutes) * 100).round();
+      return {
+        'subject': entry.key,
+        'minutes': entry.value,
+        'percent': percent,
+        'color': subjectColors[entry.key] ?? AppColors.subjectAccentColor(entry.key),
+      };
+    }).toList();
+
+    breakdown.sort((a, b) => (b['minutes'] as int).compareTo(a['minutes'] as int));
+    return breakdown;
+  }
+
+  Widget _buildSubjectAnalysisCard() {
+    final breakdown = _getSubjectBreakdown();
+    if (breakdown.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "TODAY'S SUBJECT BALANCE",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+              letterSpacing: 0.7,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              for (int i = 0; i < breakdown.length; i++) ...[
+                Expanded(
+                  flex: (breakdown[i]['minutes'] as int).clamp(1, 10000),
+                  child: Container(
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: breakdown[i]['color'] as Color,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                if (i < breakdown.length - 1) const SizedBox(width: 6),
+              ],
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 18,
+            runSpacing: 8,
+            children: breakdown.map((item) {
+              final color = item['color'] as Color;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${item['subject']} ${item['percent']}%',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHomeContent() {
     return SingleChildScrollView(
       child: Padding(
@@ -381,6 +550,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 dayStreak: _dayStreak,
                 focusHours: _totalFocusHours,
               ),
+
+            if (_todayTasks.isNotEmpty)
+              const SizedBox(height: AppSpacing.md),
+            if (_todayTasks.isNotEmpty)
+              _buildSubjectAnalysisCard(),
             
             // Performance Tracking Card - Temporarily hidden
             // const SizedBox(height: AppSpacing.lg),
@@ -463,20 +637,26 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ] else ...[
               for (int i = 0; i < _todayTasks.length && i < 5; i++) ...[
-                StatusTaskCard(
-                  taskId: _todayTasks[i]['id'] ?? '',
-                  title: _todayTasks[i]['name'] ?? 'Untitled Task',
-                  timeSlot: _formatTimeRange(_todayTasks[i]), // 🔧 Pass full task object
-                  duration: '${_todayTasks[i]['estimatedTime'] ?? 1}h',
-                  difficulty: _todayTasks[i]['difficulty'] ?? 'Medium',
-                  category: _todayTasks[i]['category'] ?? 'General',
-                  status: _getTaskStatus(_todayTasks[i]['id'] ?? ''),
-                  onStatusChanged: _handleTaskStatusChange,
-                  onDelete: () async {
-                    await _storage.deleteCustomTask(_todayTasks[i]['id'] ?? '');
-                    _loadData();
-                  },
-                ),
+                (() {
+                  final subject = _getSubjectLabel(_todayTasks[i]);
+                  final subjectColor = _getSubjectColor(_todayTasks[i]);
+                  return StatusTaskCard(
+                    taskId: _todayTasks[i]['id'] ?? '',
+                    title: _todayTasks[i]['name'] ?? 'Untitled Task',
+                    timeSlot: _formatTimeRange(_todayTasks[i]),
+                    duration: '${_todayTasks[i]['estimatedTime'] ?? 1}h',
+                    difficulty: _todayTasks[i]['difficulty'] ?? 'Medium',
+                    category: _todayTasks[i]['category'] ?? 'General',
+                    subject: subject,
+                    accentColor: subjectColor,
+                    status: _getTaskStatus(_todayTasks[i]['id'] ?? ''),
+                    onStatusChanged: _handleTaskStatusChange,
+                    onDelete: () async {
+                      await _storage.deleteCustomTask(_todayTasks[i]['id'] ?? '');
+                      _loadData();
+                    },
+                  );
+                })(),
               ],
             ],
             const SizedBox(height: AppSpacing.xl),
@@ -595,6 +775,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: task['name'] ?? 'Untitled Schedule',
                   subtitle: _formatScheduleSubtitle(task),
                   bestSlot: _formatTimeRange(task),
+                  subject: _getSubjectLabel(task),
+                  accentColor: _getSubjectColor(task),
                   priority: 'Schedule', // Changed from difficulty
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(

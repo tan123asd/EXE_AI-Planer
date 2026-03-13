@@ -6,6 +6,8 @@ class PriorityTaskCard extends StatelessWidget {
   final String subtitle;
   final String bestSlot;
   final String priority;
+  final String subject;
+  final Color? accentColor;
   final VoidCallback? onTap;
 
   const PriorityTaskCard({
@@ -14,10 +16,16 @@ class PriorityTaskCard extends StatelessWidget {
     required this.subtitle,
     required this.bestSlot,
     required this.priority,
+    this.subject = 'Other',
+    this.accentColor,
     this.onTap,
   }) : super(key: key);
 
   Color _getPriorityColor() {
+    if (accentColor != null) {
+      return accentColor!;
+    }
+
     switch (priority.toLowerCase()) {
       case 'high':
         return AppColors.danger;
@@ -148,6 +156,26 @@ class PriorityTaskCard extends StatelessWidget {
                                   color: Colors.white,
                                   letterSpacing: 0.5,
                                 ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.bookmark_rounded,
+                              size: 13,
+                              color: _getPriorityColor(),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              subject,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _getPriorityColor(),
+                                letterSpacing: 0.3,
                               ),
                             ),
                           ],

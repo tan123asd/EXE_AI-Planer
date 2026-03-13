@@ -10,6 +10,8 @@ class StatusTaskCard extends StatefulWidget {
   final String duration;
   final String difficulty;
   final String category;
+  final String subject;
+  final Color? accentColor;
   final TaskStatus status;
   final Function(String taskId, TaskStatus newStatus) onStatusChanged;
   final VoidCallback? onDelete;
@@ -23,6 +25,8 @@ class StatusTaskCard extends StatefulWidget {
     required this.duration,
     required this.difficulty,
     required this.category,
+    this.subject = 'Other',
+    this.accentColor,
     this.status = TaskStatus.pending,
     required this.onStatusChanged,
     this.onDelete,
@@ -73,8 +77,26 @@ class _StatusTaskCardState extends State<StatusTaskCard>
     }
   }
 
+  Color _getAccentColor() {
+    return widget.accentColor ?? AppColors.subjectAccentColor(widget.subject);
+  }
+
+  Color _getSurfaceColor() {
+    return _getAccentColor().withOpacity(0.12);
+  }
+
   IconData _getCategoryIcon() {
     switch (widget.category.toLowerCase()) {
+      case 'study':
+        return Icons.school;
+      case 'personal':
+        return Icons.person;
+      case 'health':
+        return Icons.favorite;
+      case 'skill':
+        return Icons.auto_awesome;
+      case 'other':
+        return Icons.more_horiz;
       case 'math':
         return Icons.calculate;
       case 'science':
@@ -212,19 +234,19 @@ class _StatusTaskCardState extends State<StatusTaskCard>
               child: Container(
                 margin: const EdgeInsets.only(bottom: AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: _getSurfaceColor(),
                   borderRadius: BorderRadius.circular(AppRadius.lg),
                   border: Border.all(
                     color: isInProgress
-                        ? AppColors.primary
-                        : Colors.transparent,
-                    width: 2,
+                        ? _getAccentColor()
+                        : _getAccentColor().withOpacity(0.35),
+                    width: isInProgress ? 2 : 1,
                   ),
                   boxShadow: [
                     BoxShadow(
                       color: isInProgress
-                          ? AppColors.primary.withOpacity(0.2)
-                          : Colors.black.withOpacity(0.06),
+                          ? _getAccentColor().withOpacity(0.18)
+                          : _getAccentColor().withOpacity(0.08),
                       blurRadius: isInProgress ? 12 : 8,
                       offset: const Offset(0, 3),
                     ),
@@ -287,6 +309,29 @@ class _StatusTaskCardState extends State<StatusTaskCard>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: _getAccentColor(),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      widget.subject,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: _getAccentColor(),
+                                        letterSpacing: 0.4,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
                                 // Title with strikethrough if completed
                                 Text(
                                   widget.title,
@@ -310,14 +355,15 @@ class _StatusTaskCardState extends State<StatusTaskCard>
                                     Icon(
                                       Icons.access_time,
                                       size: 14,
-                                      color: AppColors.textSecondary,
+                                      color: _getAccentColor(),
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       widget.timeSlot,
                                       style: TextStyle(
                                         fontSize: 13,
-                                        color: AppColors.textSecondary,
+                                        color: _getAccentColor(),
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
@@ -342,7 +388,7 @@ class _StatusTaskCardState extends State<StatusTaskCard>
                                     Icon(
                                       _getCategoryIcon(),
                                       size: 14,
-                                      color: AppColors.primary,
+                                      color: _getAccentColor(),
                                     ),
                                   ],
                                 ),
@@ -361,8 +407,11 @@ class _StatusTaskCardState extends State<StatusTaskCard>
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _getDifficultyColor().withOpacity(0.1),
+                                  color: Colors.white.withOpacity(0.7),
                                   borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: _getDifficultyColor().withOpacity(0.25),
+                                  ),
                                 ),
                                 child: Text(
                                   widget.difficulty,

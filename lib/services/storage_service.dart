@@ -513,8 +513,8 @@ class StorageService {
           0,
         );
         
-        // Skip if in the past
-        if (slotStart.isBefore(now)) continue;
+        // Skip if before the requested search boundary.
+        if (slotStart.isBefore(checkTime)) continue;
         
         final slotEnd = slotStart.add(Duration(minutes: durationMinutes));
         
