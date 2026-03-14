@@ -16,7 +16,6 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   final StorageService _storage = StorageService();
   final TextEditingController _taskNameController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
-  final TextEditingController _customTimeController = TextEditingController();
   
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -33,27 +32,34 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   Set<int> _selectedWeekdays = {}; // 🆕 For recurring schedules (1=Monday, 7=Sunday)
   String _category = 'Study'; // 🔧 Single category instead of set
   String _notes = '';
-  String _estimatedTime = '1 hour';
-  bool _showCustomTime = false;
   bool _showAIPreview = false;
   bool _isGenerating = false;
   bool _isDeadlineManuallySet = false;
   int? _selectedSuggestionIndex;
+  String _lastGeneratedSignature = '';
   
   // AI Preview data
   String _aiEstimatedEffort = '';
+  int? _aiEstimatedMinutes;
   List<String> _aiSuggestedSlots = [];
   List<DateTime> _aiSuggestedStartTimes = [];
   List<List<Map<String, dynamic>>> _aiSuggestedSessionGroups = [];
+  List<List<Map<String, dynamic>>> _editedSessionGroups = [];
+  Set<int> _userEditedOptions = <int>{};
 
   final List<String> _difficulties = ['Easy', 'Medium', 'Hard'];
   final List<String> _taskTypes = ['Task', 'Schedules']; // 🔧 Changed from priorities
-  final List<String> _timeOptions = ['30 min', '1 hour', '2 hours', '3 hours', 'Custom'];
   final List<String> _categories = ['Study', 'Personal', 'Health', 'Skill', 'Other'];
 
   @override
   void initState() {
     super.initState();
+    // Hot-reload safety: ensure collection fields are never null in existing State objects
+    _aiSuggestedSlots = _aiSuggestedSlots;
+    _aiSuggestedStartTimes = _aiSuggestedStartTimes;
+    _aiSuggestedSessionGroups = _aiSuggestedSessionGroups;
+    _editedSessionGroups = _editedSessionGroups ?? [];
+    _userEditedOptions = _userEditedOptions ?? <int>{};
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -80,7 +86,6 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     _animationController.dispose();
     _taskNameController.dispose();
     _notesController.dispose();
-    _customTimeController.dispose();
     super.dispose();
   }
 
@@ -130,6 +135,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           _deadlineTime = pickedTime;
           _isDeadlineManuallySet = true;
           _selectedSuggestionIndex = null; // 🔧 Reset selection since user manually picked time
+          _invalidateAIPreviewState();
         });
       }
     }
@@ -171,7 +177,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       // 🔧 Different logic for Task vs Schedules
       if (_taskType == 'Task') {
         // === AI ESTIMATE FOR TASK ===
-        int totalMinutes = _getBaseEstimatedMinutes();
+        int totalMinutes = _estimateTaskMinutesBySignals();
 
         // Adjust based on difficulty.
         if (_difficulty == 'Hard') {
@@ -197,6 +203,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       }
 
       _aiEstimatedEffort = _formatEstimatedEffort(totalMinutes);
+  _aiEstimatedMinutes = totalMinutes;
       
       // 🆕 Get break settings
       final breakSettings = _storage.getBreakSettings();
@@ -332,8 +339,16 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       } else {
         _selectedSuggestionIndex = null;
       }
+
+      // Deep-copy AI sessions so user edits don't mutate the originals
+      _editedSessionGroups = _aiSuggestedSessionGroups
+          .map((g) => g.map((s) => Map<String, dynamic>.from(s)).toList())
+          .toList();
+      _userEditedOptions = {};
+      _lastGeneratedSignature = _buildPlanningSignature();
       } else {
         // === PREVIEW FOR SCHEDULES ===
+        _aiEstimatedMinutes = null;
         _aiSuggestedSlots = [];
         _aiSuggestedStartTimes = [];
         _aiSuggestedSessionGroups = [];
@@ -349,6 +364,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         
         _aiEstimatedEffort = 'Recurring schedule';
         _aiSuggestedSlots.add('📅 Every $weekdaysText\n🕐 $startTimeText – $endTimeText');
+        _lastGeneratedSignature = _buildPlanningSignature();
       }
       
       setState(() {
@@ -379,29 +395,500 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     }
   }
 
-  int _getBaseEstimatedMinutes() {
-    if (_estimatedTime.contains('30 min')) {
-      return 30;
-    }
-    if (_estimatedTime.contains('1 hour')) {
-      return 60;
-    }
-    if (_estimatedTime.contains('2 hours')) {
-      return 120;
-    }
-    if (_estimatedTime.contains('3 hours')) {
-      return 180;
+  int _estimateTaskMinutesBySignals() {
+    final title = _taskNameController.text.trim().toLowerCase();
+    final notes = _notesController.text.trim().toLowerCase();
+    final combinedText = '$title $notes';
+
+    int minutes;
+    switch (_category) {
+      case 'Study':
+        minutes = 90;
+        break;
+      case 'Skill':
+        minutes = 90;
+        break;
+      case 'Health':
+        minutes = 60;
+        break;
+      case 'Personal':
+        minutes = 45;
+        break;
+      default:
+        minutes = 60;
     }
 
-    if (_showCustomTime && _customTimeController.text.isNotEmpty) {
-      final raw = _customTimeController.text.trim().replaceAll(',', '.');
-      final customHours = double.tryParse(raw);
-      if (customHours != null && customHours > 0) {
-        return (customHours * 60).round();
+    final complexKeywords = RegExp(
+      r'project|assignment|report|presentation|exam|revision|research|plan|strategy|build|implement|feature|debug|refactor|module',
+    );
+    final quickKeywords = RegExp(
+      r'read|review|check|email|message|note|summary|flashcard|walk|stretch|cleanup',
+    );
+
+    if (complexKeywords.hasMatch(combinedText)) {
+      minutes += 45;
+    }
+    if (quickKeywords.hasMatch(combinedText)) {
+      minutes -= 20;
+    }
+
+    final wordCount = combinedText
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .length;
+    if (wordCount >= 10) {
+      minutes += 20;
+    }
+    if (wordCount >= 18) {
+      minutes += 20;
+    }
+
+    if (RegExp(r'chapter\s*\d+|part\s*\d+|unit\s*\d+').hasMatch(combinedText)) {
+      minutes += 20;
+    }
+
+    if (_difficulty == 'Easy') {
+      minutes -= 10;
+    } else if (_difficulty == 'Medium') {
+      minutes += 15;
+    } else {
+      minutes += 35;
+    }
+
+    if (_deadline != null) {
+      final totalHoursToDeadline = _deadline!.difference(DateTime.now()).inHours;
+      if (totalHoursToDeadline > 0 && totalHoursToDeadline <= 24) {
+        minutes += 15;
       }
     }
 
-    return 60;
+    minutes = minutes.clamp(30, 480);
+    return ((minutes + 15) ~/ 30) * 30;
+  }
+
+  void _invalidateAIPreviewState() {
+    _showAIPreview = false;
+    _selectedSuggestionIndex = null;
+    _aiEstimatedEffort = '';
+    _aiEstimatedMinutes = null;
+    _aiSuggestedSlots = <String>[];
+    _aiSuggestedStartTimes = <DateTime>[];
+    _aiSuggestedSessionGroups = <List<Map<String, dynamic>>>[];
+    _editedSessionGroups = <List<Map<String, dynamic>>>[];
+    _userEditedOptions = <int>{};
+    _lastGeneratedSignature = '';
+  }
+
+  String _buildPlanningSignature() {
+    final sortedWeekdays = _selectedWeekdays.toList()..sort();
+    final startTime = _scheduleStartTime == null
+        ? ''
+        : '${_scheduleStartTime!.hour.toString().padLeft(2, '0')}:${_scheduleStartTime!.minute.toString().padLeft(2, '0')}';
+    final endTime = _scheduleEndTime == null
+        ? ''
+        : '${_scheduleEndTime!.hour.toString().padLeft(2, '0')}:${_scheduleEndTime!.minute.toString().padLeft(2, '0')}';
+
+    return [
+      _taskType,
+      _taskNameController.text.trim().toLowerCase(),
+      _notesController.text.trim().toLowerCase(),
+      _difficulty,
+      _category,
+      _deadline?.toIso8601String() ?? '',
+      _deadlineTime == null
+          ? ''
+          : '${_deadlineTime!.hour.toString().padLeft(2, '0')}:${_deadlineTime!.minute.toString().padLeft(2, '0')}',
+      sortedWeekdays.join(','),
+      startTime,
+      endTime,
+      _scheduleEndDate?.toIso8601String() ?? '',
+    ].join('|');
+  }
+
+  // Build display text for a suggestion card, reflecting any user edits
+  String _buildSlotDisplayText(int optionIndex) {
+    final editedSet = _userEditedOptions ?? <int>{};
+    final editedGroups = _editedSessionGroups ?? <List<Map<String, dynamic>>>[];
+    if (!editedSet.contains(optionIndex) ||
+        optionIndex >= editedGroups.length) {
+      return optionIndex < _aiSuggestedSlots.length
+          ? _aiSuggestedSlots[optionIndex]
+          : '';
+    }
+    final sessions = editedGroups[optionIndex];
+    if (sessions.isEmpty) {
+      return optionIndex < _aiSuggestedSlots.length
+          ? _aiSuggestedSlots[optionIndex]
+          : '';
+    }
+    final breakSettings = _storage.getBreakSettings();
+    final needsBreaks = (_aiEstimatedMinutes ?? 0) > 60 && breakSettings['enabled'] as bool;
+    if (sessions.length == 1) {
+      final start = DateTime.parse(sessions[0]['startTime'] as String);
+      final end = DateTime.parse(sessions[0]['endTime'] as String);
+      String text =
+          '${DateFormat('EEEE, MMM d').format(start)} • '
+          '${_formatTimeWith24H(start)} – ${_formatTimeWith24H(end, isRangeEnd: true)}';
+      if (needsBreaks) {
+        text += '\n⏱️ Break after ${breakSettings['workDuration']}min';
+      }
+      return text;
+    }
+    final lines = sessions.asMap().entries.map((e) {
+      final s = e.value;
+      final start = DateTime.parse(s['startTime'] as String);
+      final end = DateTime.parse(s['endTime'] as String);
+      return 'S${e.key + 1}: ${DateFormat('EEE d').format(start)} '
+          '${_formatTimeWith24H(start)}-${_formatTimeWith24H(end, isRangeEnd: true)}';
+    }).toList();
+    String text =
+        'Option ${optionIndex + 1} • ${sessions.length} sessions\n${lines.join('\n')}';
+    if (needsBreaks) {
+      text +=
+          '\n⏱️ ${breakSettings['workDuration']}min work / ${breakSettings['breakDuration']}min break';
+    }
+    return text;
+  }
+
+  // Bottom sheet for user to manually adjust AI-suggested session times
+  Future<void> _showEditSessionSheet(int optionIndex) async {
+    final editedGroups = _editedSessionGroups ?? <List<Map<String, dynamic>>>[];
+    if (optionIndex >= editedGroups.length) return;
+
+    // Local mutable copy – applied to state only when user taps "Confirm"
+    final localSessions = editedGroups[optionIndex]
+        .map((s) => Map<String, dynamic>.from(s))
+        .toList();
+    bool changed = false;
+    bool didReset = false;
+
+    final ThemeData pickerTheme = Theme.of(context).copyWith(
+      colorScheme: ColorScheme.light(
+        primary: AppColors.primary,
+        onPrimary: Colors.white,
+        surface: Colors.white,
+        onSurface: AppColors.textPrimary,
+      ),
+    );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (builderCtx, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                top: 12,
+                left: 20,
+                right: 20,
+                bottom: MediaQuery.of(builderCtx).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Handle bar
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Header row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.edit_calendar,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Adjust Schedule',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            Text(
+                              'Change dates & times to fit your availability',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary.withOpacity(0.85),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Reset to AI button
+                      TextButton.icon(
+                        onPressed: () {
+                          final aiGroups = _aiSuggestedSessionGroups ?? <List<Map<String, dynamic>>>[];
+                          if (optionIndex < aiGroups.length) {
+                            final original = aiGroups[optionIndex]
+                                .map((s) => Map<String, dynamic>.from(s))
+                                .toList();
+                            for (int i = 0; i < localSessions.length && i < original.length; i++) {
+                              localSessions[i] = original[i];
+                            }
+                            changed = true;
+                            didReset = true;
+                          }
+                          setSheetState(() {});
+                        },
+                        icon: const Icon(Icons.restart_alt, size: 15),
+                        label: const Text('Reset'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  const SizedBox(height: 14),
+                  // Session rows
+                  ...localSessions.asMap().entries.map((entry) {
+                    final sIdx = entry.key;
+                    final session = localSessions[sIdx];
+                    final start = DateTime.parse(session['startTime'] as String);
+                    final end = DateTime.parse(session['endTime'] as String);
+                    final duration = session['duration'] as int;
+                    final durationLabel = duration >= 60
+                        ? '${duration ~/ 60}h${duration % 60 > 0 ? ' ${duration % 60}m' : ''}'
+                        : '${duration}min';
+                    final sessionLabel = localSessions.length > 1
+                        ? 'Session ${sIdx + 1}'
+                        : 'Session';
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: AppColors.primary.withOpacity(0.15),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        sessionLabel,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          durationLabel,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.primary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    DateFormat('EEE, d MMM yyyy').format(start),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${_formatTimeWith24H(start)} – ${_formatTimeWith24H(end, isRangeEnd: true)}',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                final pickedDate = await showDatePicker(
+                                  context: builderCtx,
+                                  initialDate: start,
+                                  firstDate: DateTime.now(),
+                                  lastDate: DateTime.now().add(const Duration(days: 180)),
+                                  builder: (ctx, child) => Theme(
+                                    data: pickerTheme,
+                                    child: child!,
+                                  ),
+                                );
+                                if (pickedDate == null) return;
+                                final pickedTime = await showTimePicker(
+                                  context: builderCtx,
+                                  initialTime: TimeOfDay(
+                                    hour: start.hour,
+                                    minute: start.minute,
+                                  ),
+                                  builder: (ctx, child) => Theme(
+                                    data: pickerTheme,
+                                    child: child!,
+                                  ),
+                                );
+                                if (pickedTime == null) return;
+                                final newStart = DateTime(
+                                  pickedDate.year,
+                                  pickedDate.month,
+                                  pickedDate.day,
+                                  pickedTime.hour,
+                                  pickedTime.minute,
+                                );
+                                final newEnd =
+                                    newStart.add(Duration(minutes: duration));
+                                localSessions[sIdx] = {
+                                  'startTime': newStart.toIso8601String(),
+                                  'endTime': newEnd.toIso8601String(),
+                                  'duration': duration,
+                                };
+                                changed = true;
+                                didReset = false;
+                                setSheetState(() {});
+                              },
+                              icon: const Icon(Icons.schedule, size: 15),
+                              label: const Text('Edit'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                  const SizedBox(height: 4),
+                  // Confirm button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'Confirm',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (!changed || !mounted) return;
+    setState(() {
+      (_editedSessionGroups ?? <List<Map<String, dynamic>>>[]).length > optionIndex
+          ? _editedSessionGroups![optionIndex] = localSessions
+          : null;
+      // Safer: ensure list is big enough
+      while ((_editedSessionGroups ?? []).length <= optionIndex) {
+        (_editedSessionGroups ??= []).add([]);
+      }
+      _editedSessionGroups![optionIndex] = localSessions;
+      if (didReset) {
+        (_userEditedOptions ?? <int>{}).remove(optionIndex);
+      } else {
+        (_userEditedOptions ??= <int>{}).add(optionIndex);
+      }
+      // Keep aiSuggestedStartTimes in sync with edited first session
+      if (localSessions.isNotEmpty &&
+          optionIndex < _aiSuggestedStartTimes.length) {
+        _aiSuggestedStartTimes[optionIndex] =
+            DateTime.parse(localSessions[0]['startTime'] as String);
+      }
+      // If this option is selected + deadline not manually set, sync deadline
+      if (_selectedSuggestionIndex == optionIndex &&
+          !_isDeadlineManuallySet &&
+          localSessions.isNotEmpty) {
+        final ns = DateTime.parse(localSessions[0]['startTime'] as String);
+        _deadline = DateTime(ns.year, ns.month, ns.day);
+        _deadlineTime = TimeOfDay(hour: ns.hour, minute: ns.minute);
+      }
+      // Re-capture signature so stale-check still passes after editing
+      _lastGeneratedSignature = _buildPlanningSignature();
+    });
   }
 
   String _formatEstimatedEffort(int totalMinutes) {
@@ -536,6 +1023,28 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   }
 
   Future<void> _addTaskToPlan() async {
+    if (!_showAIPreview || _lastGeneratedSignature != _buildPlanningSignature()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(Icons.info_outline, color: Colors.white, size: 20),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text('Please generate AI schedule again after your latest changes'),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.textPrimary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+      return;
+    }
+
     // 🔧 Validation for Schedules
     if (_taskType == 'Schedules') {
       if (_selectedWeekdays.isEmpty) {
@@ -630,24 +1139,28 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     
     _formKey.currentState!.save();
     
-    // Parse estimated time (only for Task type)
+    // Use AI-estimated minutes (only for Task type)
     int estimatedHours = 1;
     int estimatedMinutes = 60;
     if (_taskType == 'Task') {
-      estimatedMinutes = _getBaseEstimatedMinutes();
+      estimatedMinutes = _aiEstimatedMinutes ?? _estimateTaskMinutesBySignals();
       estimatedHours = (estimatedMinutes / 60).ceil();
     }
     
     // 🆕 Get break settings
     final breakSettings = _storage.getBreakSettings();
 
+    // Use user-edited sessions if available, otherwise fall back to raw AI sessions
+    final sessionSource = _editedSessionGroups.isNotEmpty
+        ? _editedSessionGroups
+        : _aiSuggestedSessionGroups;
     final selectedGroupIndex = (_selectedSuggestionIndex != null &&
         _selectedSuggestionIndex! >= 0 &&
-        _selectedSuggestionIndex! < _aiSuggestedSessionGroups.length)
+        _selectedSuggestionIndex! < sessionSource.length)
       ? _selectedSuggestionIndex!
       : 0;
-    final selectedSessions = _aiSuggestedSessionGroups.isNotEmpty
-      ? _aiSuggestedSessionGroups[selectedGroupIndex]
+    final selectedSessions = sessionSource.isNotEmpty
+      ? sessionSource[selectedGroupIndex]
       : <Map<String, dynamic>>[];
     
     Map<String, dynamic> taskData;
@@ -797,6 +1310,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           } else {
             _selectedWeekdays.add(weekday);
           }
+          _invalidateAIPreviewState();
         });
       },
       child: Container(
@@ -910,6 +1424,11 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                             }
                             return null;
                           },
+                          onChanged: (_) {
+                            setState(() {
+                              _invalidateAIPreviewState();
+                            });
+                          },
                           onSaved: (value) => _taskName = value ?? '',
                         ),
                       ],
@@ -941,6 +1460,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                       if (type == 'Task') {
                                         _selectedWeekdays.clear();
                                       }
+                                      _invalidateAIPreviewState();
                                     });
                                   },
                                   child: AnimatedContainer(
@@ -1105,6 +1625,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               if (picked != null) {
                                 setState(() {
                                   _scheduleStartTime = picked;
+                                  _invalidateAIPreviewState();
                                 });
                               }
                             },
@@ -1189,6 +1710,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               if (picked != null) {
                                 setState(() {
                                   _scheduleEndTime = picked;
+                                  _invalidateAIPreviewState();
                                 });
                               }
                             },
@@ -1285,6 +1807,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               if (picked != null) {
                                 setState(() {
                                   _scheduleEndDate = picked;
+                                  _invalidateAIPreviewState();
                                 });
                               }
                             },
@@ -1335,6 +1858,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                       onPressed: () {
                                         setState(() {
                                           _scheduleEndDate = null;
+                                          _invalidateAIPreviewState();
                                         });
                                       },
                                     )
@@ -1354,88 +1878,50 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     const SizedBox(height: 16),
                   ],
                   
-                  // 4. Estimated Time (only for Task type)
+                  // 4. AI Time Planning (only for Task type)
                   if (_taskType == 'Task') ...[
                     _buildCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSectionLabel('Estimated Time', Icons.access_time_outlined),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _timeOptions.map((time) {
-                            final isSelected = _estimatedTime == time;
-                            final isCustom = time == 'Custom' && _showCustomTime;
-                            
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _estimatedTime = time;
-                                  _showCustomTime = time == 'Custom';
-                                });
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 12,
+                          _buildSectionLabel('AI Time Planning', Icons.auto_awesome_outlined),
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.background,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppColors.primary.withOpacity(0.2),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.psychology_alt_outlined,
+                                  color: AppColors.primary,
+                                  size: 18,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: isSelected || isCustom
-                                      ? AppColors.primary
-                                      : AppColors.background,
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(
-                                    color: isSelected || isCustom
-                                        ? AppColors.primary
-                                        : Colors.transparent,
-                                    width: 1.5,
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'AI will estimate effort automatically from task title, subject, notes, and difficulty.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary.withOpacity(0.95),
+                                      height: 1.35,
+                                    ),
                                   ),
                                 ),
-                                child: Text(
-                                  time,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: isSelected || isCustom
-                                        ? Colors.white
-                                        : AppColors.textPrimary,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        if (_showCustomTime) ...[
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _customTimeController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              hintText: 'Enter hours (e.g., 4)',
-                              hintStyle: const TextStyle(
-                                color: Color(0xFFCCCCCC),
-                                fontSize: 14,
-                              ),
-                              filled: true,
-                              fillColor: AppColors.background,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
+                              ],
                             ),
                           ),
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
                   
                   // 6. Difficulty
                   _buildCard(
@@ -1458,6 +1944,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   onTap: () {
                                     setState(() {
                                       _difficulty = diff;
+                                      _invalidateAIPreviewState();
                                     });
                                   },
                                   child: AnimatedContainer(
@@ -1524,6 +2011,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               onTap: () {
                                 setState(() {
                                   _category = cat;
+                                  _invalidateAIPreviewState();
                                 });
                               },
                               child: AnimatedContainer(
@@ -1600,6 +2088,11 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                             ),
                             contentPadding: const EdgeInsets.all(16),
                           ),
+                          onChanged: (_) {
+                            setState(() {
+                              _invalidateAIPreviewState();
+                            });
+                          },
                           onSaved: (value) => _notes = value ?? '',
                         ),
                       ],
@@ -1703,107 +2196,236 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              const Text(
-                                'Tap a suggestion to set session plan (deadline keeps your manual choice)',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary,
-                                ),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.touch_app_outlined,
+                                    size: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Text(
+                                    'Tap to select  •  Tap ',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.edit_calendar_outlined,
+                                    size: 12,
+                                    color: AppColors.primary,
+                                  ),
+                                  const Text(
+                                    ' to adjust times',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 10),
                               ..._aiSuggestedSlots.asMap().entries.map((entry) {
                                 final index = entry.key;
-                                final slot = entry.value;
                                 final isSelected = _selectedSuggestionIndex == index;
-                                
-                                return GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedSuggestionIndex = index;
-                                    });
+                                final editedSet = _userEditedOptions ?? <int>{};
+                                final editedGroups = _editedSessionGroups ?? <List<Map<String, dynamic>>>[];
+                                final isEdited = editedSet.contains(index);
+                                final canEdit = index < editedGroups.length;
+                                final displayText = _buildSlotDisplayText(index);
 
-                                    if (index < _aiSuggestedStartTimes.length && !_isDeadlineManuallySet) {
-                                      final suggestedTime = _aiSuggestedStartTimes[index];
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? AppColors.primary.withOpacity(0.07)
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? AppColors.primary
+                                          : isEdited
+                                              ? const Color(0xFFD4A20A)
+                                              : Colors.grey.shade200,
+                                      width: isSelected ? 2 : 1.5,
+                                    ),
+                                  ),
+                                  child: InkWell(
+                                    onTap: () {
                                       setState(() {
-                                        _deadline = DateTime(
-                                          suggestedTime.year,
-                                          suggestedTime.month,
-                                          suggestedTime.day,
-                                        );
-                                        _deadlineTime = TimeOfDay(
-                                          hour: suggestedTime.hour,
-                                          minute: suggestedTime.minute,
-                                        );
+                                        _selectedSuggestionIndex = index;
                                       });
 
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Row(
-                                            children: const [
-                                              Icon(Icons.check_circle, color: Colors.white, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('✨ Session plan selected, deadline set!'),
-                                            ],
-                                          ),
-                                          backgroundColor: AppColors.success,
-                                          duration: const Duration(seconds: 1),
-                                          behavior: SnackBarBehavior.floating,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Row(
-                                            children: const [
-                                              Icon(Icons.check_circle, color: Colors.white, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('✨ Session plan selected. Deadline unchanged.'),
-                                            ],
-                                          ),
-                                          backgroundColor: AppColors.success,
-                                          duration: const Duration(seconds: 1),
-                                          behavior: SnackBarBehavior.floating,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  child: Container(
-                                    margin: const EdgeInsets.only(bottom: 8),
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: isSelected 
-                                          ? AppColors.primary.withOpacity(0.1)
-                                          : Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: isSelected
-                                          ? Border.all(color: AppColors.primary, width: 2)
-                                          : null,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          isSelected ? Icons.check_circle : Icons.event_available,
-                                          color: isSelected ? AppColors.primary : AppColors.success,
-                                          size: 18,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text(
-                                            slot,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                                              color: AppColors.textPrimary,
+                                      if (index < _aiSuggestedStartTimes.length &&
+                                          !_isDeadlineManuallySet) {
+                                        final suggestedTime =
+                                            _aiSuggestedStartTimes[index];
+                                        setState(() {
+                                          _deadline = DateTime(
+                                            suggestedTime.year,
+                                            suggestedTime.month,
+                                            suggestedTime.day,
+                                          );
+                                          _deadlineTime = TimeOfDay(
+                                            hour: suggestedTime.hour,
+                                            minute: suggestedTime.minute,
+                                          );
+                                        });
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Row(
+                                              children: const [
+                                                Icon(Icons.check_circle,
+                                                    color: Colors.white, size: 18),
+                                                SizedBox(width: 8),
+                                                Text('✨ Session plan selected, deadline set!'),
+                                              ],
+                                            ),
+                                            backgroundColor: AppColors.success,
+                                            duration: const Duration(seconds: 1),
+                                            behavior: SnackBarBehavior.floating,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(10),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                        );
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Row(
+                                              children: const [
+                                                Icon(Icons.check_circle,
+                                                    color: Colors.white, size: 18),
+                                                SizedBox(width: 8),
+                                                Text('✨ Session plan selected. Deadline unchanged.'),
+                                              ],
+                                            ),
+                                            backgroundColor: AppColors.success,
+                                            duration: const Duration(seconds: 1),
+                                            behavior: SnackBarBehavior.floating,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          // Select indicator
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 3),
+                                            child: Icon(
+                                              isSelected
+                                                  ? Icons.check_circle
+                                                  : Icons.radio_button_unchecked,
+                                              color: isSelected
+                                                  ? AppColors.primary
+                                                  : Colors.grey.shade400,
+                                              size: 18,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          // Content column
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                // "Manually adjusted" badge
+                                                if (isEdited)
+                                                  Container(
+                                                    margin: const EdgeInsets.only(
+                                                        bottom: 6),
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          const Color(0xFFFFF3CD),
+                                                      borderRadius:
+                                                          BorderRadius.circular(6),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: const [
+                                                        Icon(Icons.edit,
+                                                            size: 11,
+                                                            color: Color(
+                                                                0xFF8B6914)),
+                                                        SizedBox(width: 4),
+                                                        Text(
+                                                          'Manually adjusted',
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color: Color(
+                                                                0xFF8B6914),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                // Slot text
+                                                Text(
+                                                  displayText,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: isSelected
+                                                        ? FontWeight.w600
+                                                        : FontWeight.w500,
+                                                    color: AppColors.textPrimary,
+                                                    height: 1.45,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          // Edit calendar button
+                                          if (canEdit) ...[
+                                            const SizedBox(width: 8),
+                                            GestureDetector(
+                                              behavior:
+                                                  HitTestBehavior.opaque,
+                                              onTap: () =>
+                                                  _showEditSessionSheet(index),
+                                              child: Tooltip(
+                                                message: 'Adjust times',
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(7),
+                                                  decoration: BoxDecoration(
+                                                    color: isEdited
+                                                        ? const Color(0xFFFFF3CD)
+                                                        : AppColors.primary
+                                                            .withOpacity(0.1),
+                                                    borderRadius:
+                                                        BorderRadius.circular(9),
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.edit_calendar_outlined,
+                                                    color: isEdited
+                                                        ? const Color(0xFF8B6914)
+                                                        : AppColors.primary,
+                                                    size: 16,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );
