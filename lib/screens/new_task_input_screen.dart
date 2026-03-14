@@ -41,6 +41,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   // AI Preview data
   String _aiEstimatedEffort = '';
   int? _aiEstimatedMinutes;
+  int? _manualEstimatedMinutesOverride;
   List<String> _aiSuggestedSlots = [];
   List<DateTime> _aiSuggestedStartTimes = [];
   List<List<Map<String, dynamic>>> _aiSuggestedSessionGroups = [];
@@ -177,33 +178,41 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       // 🔧 Different logic for Task vs Schedules
       if (_taskType == 'Task') {
         // === AI ESTIMATE FOR TASK ===
-        int totalMinutes = _estimateTaskMinutesBySignals();
+        int totalMinutes;
+        if (_manualEstimatedMinutesOverride != null) {
+          totalMinutes = _manualEstimatedMinutesOverride!;
+        } else {
+          totalMinutes = _estimateTaskMinutesBySignals();
 
-        // Adjust based on difficulty.
-        if (_difficulty == 'Hard') {
-          totalMinutes = (totalMinutes * 1.5).round();
-        } else if (_difficulty == 'Easy') {
-          totalMinutes = (totalMinutes * 0.8).round();
+          // Adjust based on difficulty.
+          if (_difficulty == 'Hard') {
+            totalMinutes = (totalMinutes * 1.5).round();
+          } else if (_difficulty == 'Easy') {
+            totalMinutes = (totalMinutes * 0.8).round();
+          }
+
+          // 🆕 Apply historical performance data to improve estimates
+          final accuracy = _storage.getEstimateAccuracy();
+          if (accuracy['totalTasks'] > 5) {
+            final avgAccuracy = accuracy['averageAccuracy'];
+            if (avgAccuracy < 80) {
+              // User tends to underestimate, increase time
+              totalMinutes = (totalMinutes * 1.2).round();
+            }
+          }
         }
-      
-      // 🆕 Apply historical performance data to improve estimates
-      final accuracy = _storage.getEstimateAccuracy();
-      if (accuracy['totalTasks'] > 5) {
-        final avgAccuracy = accuracy['averageAccuracy'];
-        if (avgAccuracy < 80) {
-          // User tends to underestimate, increase time
-          totalMinutes = (totalMinutes * 1.2).round();
+
+        // Round to 30-minute blocks for cleaner suggestions.
+        totalMinutes = ((totalMinutes + 15) ~/ 30) * 30;
+        if (totalMinutes < 30) {
+          totalMinutes = 30;
         }
-      }
+        if (totalMinutes > 480) {
+          totalMinutes = 480;
+        }
 
-      // Round to 30-minute blocks for cleaner suggestions.
-      totalMinutes = ((totalMinutes + 15) ~/ 30) * 30;
-      if (totalMinutes < 30) {
-        totalMinutes = 30;
-      }
-
-      _aiEstimatedEffort = _formatEstimatedEffort(totalMinutes);
-  _aiEstimatedMinutes = totalMinutes;
+        _aiEstimatedEffort = _formatEstimatedEffort(totalMinutes);
+        _aiEstimatedMinutes = totalMinutes;
       
       // 🆕 Get break settings
       final breakSettings = _storage.getBreakSettings();
@@ -471,6 +480,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     _selectedSuggestionIndex = null;
     _aiEstimatedEffort = '';
     _aiEstimatedMinutes = null;
+    _manualEstimatedMinutesOverride = null;
     _aiSuggestedSlots = <String>[];
     _aiSuggestedStartTimes = <DateTime>[];
     _aiSuggestedSessionGroups = <List<Map<String, dynamic>>>[];
@@ -903,6 +913,163 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     return '${hours}h ${minutes}m';
   }
 
+  Future<void> _showEditEstimatedEffortSheet() async {
+    if (_taskType != 'Task' || _isGenerating) return;
+
+    int selectedMinutes = _aiEstimatedMinutes ?? _manualEstimatedMinutesOverride ?? 60;
+    selectedMinutes = selectedMinutes.clamp(30, 480);
+    final quickOptions = <int>[30, 60, 90, 120, 150, 180, 240, 300, 360, 420, 480];
+
+    final result = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (builderCtx, setSheetState) {
+            String formatLabel(int mins) => _formatEstimatedEffort(mins);
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 14,
+                bottom: MediaQuery.of(builderCtx).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Edit Estimated Effort',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Adjust how long this task should take. AI will regenerate schedule suggestions.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary.withOpacity(0.9),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.timer_outlined, color: AppColors.primary, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          formatLabel(selectedMinutes),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: quickOptions.map((mins) {
+                      final isSelected = selectedMinutes == mins;
+                      return ChoiceChip(
+                        label: Text(formatLabel(mins)),
+                        selected: isSelected,
+                        onSelected: (_) {
+                          setSheetState(() {
+                            selectedMinutes = mins;
+                          });
+                        },
+                        selectedColor: AppColors.primary.withOpacity(0.18),
+                        labelStyle: TextStyle(
+                          color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        side: BorderSide(
+                          color: isSelected ? AppColors.primary : Colors.grey.shade300,
+                        ),
+                        backgroundColor: Colors.white,
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+                  Slider(
+                    value: selectedMinutes.toDouble(),
+                    min: 30,
+                    max: 480,
+                    divisions: 15,
+                    label: formatLabel(selectedMinutes),
+                    activeColor: AppColors.primary,
+                    onChanged: (value) {
+                      setSheetState(() {
+                        selectedMinutes = ((value.round() + 15) ~/ 30) * 30;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(sheetCtx).pop(selectedMinutes),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'Apply & Regenerate',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _manualEstimatedMinutesOverride = result;
+    });
+
+    _generateAIEstimate();
+  }
+
   int _getPreferredHour() {
     final notes = _notesController.text.toLowerCase();
     final hasUrgencySignal = notes.contains('urgent') ||
@@ -1143,7 +1310,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     int estimatedHours = 1;
     int estimatedMinutes = 60;
     if (_taskType == 'Task') {
-      estimatedMinutes = _aiEstimatedMinutes ?? _estimateTaskMinutesBySignals();
+      estimatedMinutes = _aiEstimatedMinutes ?? _manualEstimatedMinutesOverride ?? _estimateTaskMinutesBySignals();
       estimatedHours = (estimatedMinutes / 60).ceil();
     }
     
@@ -1216,7 +1383,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         'startTime': '${_scheduleStartTime!.hour.toString().padLeft(2, '0')}:${_scheduleStartTime!.minute.toString().padLeft(2, '0')}',
         'endTime': '${_scheduleEndTime!.hour.toString().padLeft(2, '0')}:${_scheduleEndTime!.minute.toString().padLeft(2, '0')}',
         'scheduleEndDate': _scheduleEndDate?.toIso8601String(), // 🆕 Optional end date
-        'notes': _notes,
+        'notes': '',
         'createdAt': DateTime.now().toIso8601String(),
       };
     }
@@ -1459,6 +1626,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                       // Reset weekdays if switching to Task
                                       if (type == 'Task') {
                                         _selectedWeekdays.clear();
+                                      } else {
+                                        _category = 'Other';
+                                        _notesController.clear();
+                                        _notes = '';
                                       }
                                       _invalidateAIPreviewState();
                                     });
@@ -2064,41 +2235,43 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                   ),
                   const SizedBox(height: 16),
                   
-                  // 7. Notes
-                  _buildCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionLabel('Notes (Optional)', Icons.note_outlined),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _notesController,
-                          maxLines: 4,
-                          decoration: InputDecoration(
-                            hintText: 'Extra information for the AI...',
-                            hintStyle: const TextStyle(
-                              color: Color(0xFFCCCCCC),
-                              fontSize: 14,
+                  // 7. Notes (Task only)
+                  if (_taskType == 'Task') ...[
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('Notes (Optional)', Icons.note_outlined),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _notesController,
+                            maxLines: 4,
+                            decoration: InputDecoration(
+                              hintText: 'Extra information for the AI...',
+                              hintStyle: const TextStyle(
+                                color: Color(0xFFCCCCCC),
+                                fontSize: 14,
+                              ),
+                              filled: true,
+                              fillColor: AppColors.background,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.all(16),
                             ),
-                            filled: true,
-                            fillColor: AppColors.background,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                            contentPadding: const EdgeInsets.all(16),
+                            onChanged: (_) {
+                              setState(() {
+                                _invalidateAIPreviewState();
+                              });
+                            },
+                            onSaved: (value) => _notes = value ?? '',
                           ),
-                          onChanged: (_) {
-                            setState(() {
-                              _invalidateAIPreviewState();
-                            });
-                          },
-                          onSaved: (value) => _notes = value ?? '',
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
+                  ],
                   
                   // 8. AI Preview Section
                   if (_showAIPreview)
@@ -2183,6 +2356,24 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                         color: AppColors.textPrimary,
                                       ),
                                     ),
+                                    const Spacer(),
+                                    if (_taskType == 'Task')
+                                      InkWell(
+                                        onTap: _showEditEstimatedEffortSheet,
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: const Icon(
+                                            Icons.edit_outlined,
+                                            size: 16,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
