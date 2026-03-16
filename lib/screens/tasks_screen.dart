@@ -50,7 +50,8 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   bool _isSchedule(Map<String, dynamic> task) {
-    return task['taskType'] == 'Schedules';
+    final type = (task['taskType'] ?? '').toString();
+    return type == 'Schedules' || type == 'Activity';
   }
 
   String _formatDurationMinutes(int minutes) {
@@ -165,6 +166,23 @@ class _TasksScreenState extends State<TasksScreen> {
     return 'No specific time';
   }
 
+  String? _resolveDeadlineLabel(Map<String, dynamic> task) {
+    if ((task['taskType'] ?? '').toString() != 'Task') {
+      return null;
+    }
+
+    final deadline = DateTime.tryParse((task['deadline'] ?? '').toString());
+    if (deadline == null) {
+      return null;
+    }
+
+    if (deadline.hour == 0 && deadline.minute == 0) {
+      return DateFormat('dd/MM').format(deadline);
+    }
+
+    return DateFormat('dd/MM • HH:mm').format(deadline);
+  }
+
   String _formatWeekdays(dynamic weekdays) {
     final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     if (weekdays is! List || weekdays.isEmpty) {
@@ -183,11 +201,9 @@ class _TasksScreenState extends State<TasksScreen> {
 
   Widget _buildScheduleCard(Map<String, dynamic> schedule) {
     final title = (schedule['name'] ?? 'Untitled Schedule').toString();
-    final subject = (schedule['subject'] ?? schedule['category'] ?? 'Other').toString();
-    final subjectColorRaw = schedule['subjectColor'];
-    final accentColor = subjectColorRaw is int
-        ? Color(subjectColorRaw)
-        : AppColors.subjectAccentColor(subject);
+    final category = (schedule['category'] ?? schedule['subject'] ?? 'Other').toString();
+    final subject = category;
+    final accentColor = AppColors.subjectAccentColor(category);
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -290,9 +306,19 @@ class _TasksScreenState extends State<TasksScreen> {
   Widget build(BuildContext context) {
     final tasks = _allTasks.where((task) => !_isSchedule(task)).toList();
     final schedules = _allTasks.where(_isSchedule).toList();
+    final activities = schedules
+      .where((task) => (task['taskType'] ?? '').toString() == 'Activity')
+      .toList();
     final showTasks = _activeFilter == 'all' || _activeFilter == 'tasks';
     final showSchedules = _activeFilter == 'all' || _activeFilter == 'schedules';
-    final hasVisibleItems = (showTasks && tasks.isNotEmpty) || (showSchedules && schedules.isNotEmpty);
+    final showActivities = _activeFilter == 'all' || _activeFilter == 'activities';
+    final schedulesOnly = schedules
+      .where((task) => (task['taskType'] ?? '').toString() == 'Schedules')
+      .toList();
+    final hasVisibleItems =
+      (showTasks && tasks.isNotEmpty) ||
+      (showSchedules && schedulesOnly.isNotEmpty) ||
+      (showActivities && activities.isNotEmpty);
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -349,7 +375,13 @@ class _TasksScreenState extends State<TasksScreen> {
               _buildFilterChip(
                 keyName: 'schedules',
                 label: 'Schedules',
-                count: schedules.length,
+                count: schedulesOnly.length,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                keyName: 'activities',
+                label: 'Activity',
+                count: activities.length,
               ),
             ],
           ),
@@ -401,16 +433,15 @@ class _TasksScreenState extends State<TasksScreen> {
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         ...tasks.map((task) {
-                          final subject = (task['subject'] ?? task['category'] ?? 'Other').toString();
-                          final subjectColorRaw = task['subjectColor'];
-                          final accentColor = subjectColorRaw is int
-                              ? Color(subjectColorRaw)
-                              : AppColors.subjectAccentColor(subject);
+                          final category = (task['category'] ?? task['subject'] ?? 'Other').toString();
+                          final subject = category;
+                          final accentColor = AppColors.subjectAccentColor(category);
 
                           return StatusTaskCard(
                             taskId: (task['id'] ?? '').toString(),
                             title: (task['name'] ?? 'Untitled Task').toString(),
                             timeSlot: _resolveTaskTimeSlot(task),
+                            deadlineText: _resolveDeadlineLabel(task),
                             duration: _formatDurationMinutes(_resolveEstimatedMinutes(task)),
                             difficulty: (task['difficulty'] ?? 'Medium').toString(),
                             category: (task['category'] ?? 'General').toString(),
@@ -425,9 +456,9 @@ class _TasksScreenState extends State<TasksScreen> {
                           );
                         }),
                       ],
-                      if (showTasks && tasks.isNotEmpty && showSchedules && schedules.isNotEmpty)
+                      if (showTasks && tasks.isNotEmpty && showSchedules && schedulesOnly.isNotEmpty)
                         const SizedBox(height: AppSpacing.md),
-                      if (showSchedules && schedules.isNotEmpty) ...[
+                      if (showSchedules && schedulesOnly.isNotEmpty) ...[
                         const Text(
                           'Recurring Schedules',
                           style: TextStyle(
@@ -437,7 +468,22 @@ class _TasksScreenState extends State<TasksScreen> {
                           ),
                         ),
                         const SizedBox(height: AppSpacing.sm),
-                        ...schedules.map(_buildScheduleCard),
+                        ...schedulesOnly.map(_buildScheduleCard),
+                      ],
+                      if ((showTasks && tasks.isNotEmpty || showSchedules && schedulesOnly.isNotEmpty) &&
+                          showActivities && activities.isNotEmpty)
+                        const SizedBox(height: AppSpacing.md),
+                      if (showActivities && activities.isNotEmpty) ...[
+                        const Text(
+                          'Activities',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        ...activities.map(_buildScheduleCard),
                       ],
                     ],
                   ),

@@ -49,7 +49,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   Set<int> _userEditedOptions = <int>{};
 
   final List<String> _difficulties = ['Easy', 'Medium', 'Hard'];
-  final List<String> _taskTypes = ['Task', 'Schedules']; // 🔧 Changed from priorities
+  final List<String> _taskTypes = ['Schedules', 'Task', 'Activity'];
   final List<String> _categories = ['Study', 'Personal', 'Health', 'Skill', 'Other'];
 
   @override
@@ -1213,7 +1213,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     }
 
     // 🔧 Validation for Schedules
-    if (_taskType == 'Schedules') {
+    if (_taskType == 'Schedules' || _taskType == 'Activity') {
       if (_selectedWeekdays.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1348,13 +1348,13 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       taskData = {
         'id': DateTime.now().millisecondsSinceEpoch.toString(),
         'name': _taskName,
-        'subject': _category,
-        'subjectColor': AppColors.subjectAccentColor(_category).toARGB32(),
+        'subject': _taskType,
+        'subjectColor': AppColors.subjectAccentColor(_taskType).toARGB32(),
         'difficulty': _difficulty,
         'deadline': finalDeadline.toIso8601String(),
         'estimatedTime': estimatedHours,
         'estimatedMinutes': estimatedMinutes,
-        'category': _category,
+        'category': _taskType,
         'taskType': 'Task',
         'notes': _notes,
         'createdAt': DateTime.now().toIso8601String(),
@@ -1374,11 +1374,11 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       taskData = {
         'id': DateTime.now().millisecondsSinceEpoch.toString(),
         'name': _taskName,
-        'subject': _category,
-        'subjectColor': AppColors.subjectAccentColor(_category).toARGB32(),
+        'subject': _taskType,
+        'subjectColor': AppColors.subjectAccentColor(_taskType).toARGB32(),
         'difficulty': _difficulty,
-        'category': _category,
-        'taskType': 'Schedules',
+        'category': _taskType,
+        'taskType': _taskType,
         'weekdays': _selectedWeekdays.toList(),
         'startTime': '${_scheduleStartTime!.hour.toString().padLeft(2, '0')}:${_scheduleStartTime!.minute.toString().padLeft(2, '0')}',
         'endTime': '${_scheduleEndTime!.hour.toString().padLeft(2, '0')}:${_scheduleEndTime!.minute.toString().padLeft(2, '0')}',
@@ -1627,7 +1627,6 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                       if (type == 'Task') {
                                         _selectedWeekdays.clear();
                                       } else {
-                                        _category = 'Other';
                                         _notesController.clear();
                                         _notes = '';
                                       }
@@ -1675,8 +1674,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                   ),
                   const SizedBox(height: 16),
                   
-                  // 2b. Weekday Selector (only for Schedules)
-                  if (_taskType == 'Schedules') ...[
+                  // 2b. Weekday Selector (for recurring types: Schedules/Activity)
+                  if (_taskType == 'Schedules' || _taskType == 'Activity') ...[
                     _buildCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1766,8 +1765,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     const SizedBox(height: 16),
                   ],
                   
-                  // 3b. Start/End Time (only for Schedules type)
-                  if (_taskType == 'Schedules') ...[
+                  // 3b. Start/End Time (for recurring types: Schedules/Activity)
+                  if (_taskType == 'Schedules' || _taskType == 'Activity') ...[
                     _buildCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2155,85 +2154,6 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                   ),
                   const SizedBox(height: 16),
                 ],
-                  
-                  // 5. Subject
-                  _buildCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionLabel('Subject', Icons.bookmark_outline),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Choose subject to auto-theme your cards on Home',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary.withOpacity(0.8),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _categories.map((cat) {
-                            final isSelected = _category == cat;
-                            final accentColor = _getCategoryColor(cat);
-                            
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _category = cat;
-                                  _invalidateAIPreviewState();
-                                });
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? accentColor.withOpacity(0.16)
-                                      : AppColors.background,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? accentColor
-                                        : accentColor.withOpacity(0.28),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _getCategoryIcon(cat),
-                                      size: 16,
-                                      color: isSelected
-                                          ? accentColor
-                                          : AppColors.textSecondary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      cat,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: isSelected
-                                            ? accentColor
-                                            : AppColors.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   
                   // 7. Notes (Task only)
                   if (_taskType == 'Task') ...[
