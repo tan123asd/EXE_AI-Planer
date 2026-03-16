@@ -109,6 +109,20 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   String _formatScheduleTimeRange(Map<String, dynamic> schedule) {
+    if ((schedule['taskType'] ?? '').toString() == 'Activity') {
+      final est = schedule['estimatedMinutes'];
+      int? minutes;
+      if (est is int && est > 0) {
+        minutes = est;
+      } else if (est is num && est > 0) {
+        minutes = est.round();
+      }
+      if (minutes != null) {
+        return 'Duration · ${_formatDurationMinutes(minutes)}';
+      }
+      return 'Duration not set';
+    }
+
     final start = (schedule['startTime'] ?? '').toString();
     final end = (schedule['endTime'] ?? '').toString();
     if (start.isEmpty || end.isEmpty) {
@@ -122,6 +136,12 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   int _resolveScheduleMinutes(Map<String, dynamic> schedule) {
+    if ((schedule['taskType'] ?? '').toString() == 'Activity') {
+      final est = schedule['estimatedMinutes'];
+      if (est is int && est > 0) return est;
+      if (est is num && est > 0) return est.round();
+    }
+
     final start = (schedule['startTime'] ?? '').toString().split(':');
     final end = (schedule['endTime'] ?? '').toString().split(':');
     if (start.length != 2 || end.length != 2) {

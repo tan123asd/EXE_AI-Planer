@@ -160,6 +160,28 @@ class _HomeScreenState extends State<HomeScreen> {
   String _formatTimeRange(Map<String, dynamic> task) {
     // 🔧 For Schedules type - use fixed start/end time
     if (_isRecurringType(task)) {
+      final type = (task['taskType'] ?? '').toString();
+      if (type == 'Activity') {
+        final est = task['estimatedMinutes'];
+        int? minutes;
+        if (est is int && est > 0) {
+          minutes = est;
+        } else if (est is num && est > 0) {
+          minutes = est.round();
+        }
+        if (minutes != null) {
+          final hours = minutes ~/ 60;
+          final remain = minutes % 60;
+          if (hours == 0) {
+            return '${remain} min';
+          }
+          if (remain == 0) {
+            return '${hours} h';
+          }
+          return '${hours} h ${remain} min';
+        }
+      }
+
       final startTime = task['startTime'];
       final endTime = task['endTime'];
       
@@ -376,6 +398,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int _getTaskMinutes(Map<String, dynamic> task) {
     if (_isRecurringType(task)) {
+      if ((task['taskType'] ?? '').toString() == 'Activity') {
+        final est = task['estimatedMinutes'];
+        if (est is int && est > 0) return est;
+        if (est is num && est > 0) return est.round();
+      }
+
       final start = task['startTime'];
       final end = task['endTime'];
       if (start is String && end is String) {

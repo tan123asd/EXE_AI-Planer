@@ -16,6 +16,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   final StorageService _storage = StorageService();
   final TextEditingController _taskNameController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
+  final TextEditingController _activityDurationController = TextEditingController();
   
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -37,6 +38,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   bool _isDeadlineManuallySet = false;
   int? _selectedSuggestionIndex;
   String _lastGeneratedSignature = '';
+  int? _activityDurationMinutes;
   
   // AI Preview data
   String _aiEstimatedEffort = '';
@@ -87,6 +89,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     _animationController.dispose();
     _taskNameController.dispose();
     _notesController.dispose();
+    _activityDurationController.dispose();
     super.dispose();
   }
 
@@ -151,7 +154,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       // Task validation: task title is enough to generate suggestions.
       isValid = _formKey.currentState!.validate();
       errorMessage = 'Please fill in task name';
-    } else {
+    } else if (_taskType == 'Schedules') {
       // Schedules validation: needs weekdays and start/end time
       isValid = _formKey.currentState!.validate() && 
                 _selectedWeekdays.isNotEmpty && 
@@ -163,6 +166,13 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         isValid = false;
         errorMessage = 'End time must be after start time';
       }
+    } else {
+      // Activity validation: needs weekdays + duration minutes
+      isValid = _formKey.currentState!.validate() &&
+          _selectedWeekdays.isNotEmpty &&
+          _activityDurationMinutes != null &&
+          _activityDurationMinutes! > 0;
+      errorMessage = 'Please fill in task name, dates, and duration';
     }
     
     if (isValid) {
@@ -356,23 +366,31 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       _userEditedOptions = {};
       _lastGeneratedSignature = _buildPlanningSignature();
       } else {
-        // === PREVIEW FOR SCHEDULES ===
+        // === PREVIEW FOR SCHEDULES / ACTIVITY ===
         _aiEstimatedMinutes = null;
         _aiSuggestedSlots = [];
         _aiSuggestedStartTimes = [];
         _aiSuggestedSessionGroups = [];
-        
+
         // Format weekdays
         final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         final weekdaysList = _selectedWeekdays.toList()..sort();
         final weekdaysText = weekdaysList.map((d) => days[d - 1]).join(', ');
-        
-        // Format time range in 24h display.
-        final startTimeText = _formatTimeOfDay24H(_scheduleStartTime!);
-        final endTimeText = _formatTimeOfDay24H(_scheduleEndTime!, isRangeEnd: true);
-        
-        _aiEstimatedEffort = 'Recurring schedule';
-        _aiSuggestedSlots.add('📅 Every $weekdaysText\n🕐 $startTimeText – $endTimeText');
+
+        if (_taskType == 'Schedules') {
+          // Format time range in 24h display.
+          final startTimeText = _formatTimeOfDay24H(_scheduleStartTime!);
+          final endTimeText = _formatTimeOfDay24H(_scheduleEndTime!, isRangeEnd: true);
+
+          _aiEstimatedEffort = 'Recurring schedule';
+          _aiSuggestedSlots.add('📅 Every $weekdaysText\n🕐 $startTimeText – $endTimeText');
+        } else {
+          // Activity preview: duration only
+          final mins = (_activityDurationMinutes ?? 0).clamp(1, 24 * 60);
+          _aiEstimatedEffort = 'Recurring activity';
+          _aiSuggestedSlots.add('📅 Every $weekdaysText\n⏱️ ${_formatEstimatedEffort(mins)}');
+        }
+
         _lastGeneratedSignature = _buildPlanningSignature();
       }
       
@@ -1190,7 +1208,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   }
 
   Future<void> _addTaskToPlan() async {
-    if (!_showAIPreview || _lastGeneratedSignature != _buildPlanningSignature()) {
+    // Schedules are added directly (no AI generation required).
+    if (_taskType != 'Schedules' &&
+        (!_showAIPreview || _lastGeneratedSignature != _buildPlanningSignature())) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -1212,7 +1232,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       return;
     }
 
-    // 🔧 Validation for Schedules
+    // 🔧 Validation for Schedules & Activities (recurring)
     if (_taskType == 'Schedules' || _taskType == 'Activity') {
       if (_selectedWeekdays.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1235,49 +1255,73 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         );
         return;
       }
-      
-      if (_scheduleStartTime == null || _scheduleEndTime == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: const [
-                Icon(Icons.warning, color: Colors.white, size: 20),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text('Please set start and end time for schedule'),
-                ),
-              ],
-            ),
-            backgroundColor: AppColors.danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-        return;
-      }
 
-      if (!_isValidScheduleTimeRange(_scheduleStartTime!, _scheduleEndTime!)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: const [
-                Icon(Icons.warning, color: Colors.white, size: 20),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text('End time must be after start time'),
-                ),
-              ],
+      if (_taskType == 'Schedules') {
+        if (_scheduleStartTime == null || _scheduleEndTime == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: const [
+                  Icon(Icons.warning, color: Colors.white, size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text('Please set start and end time for schedule'),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            backgroundColor: AppColors.danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+          );
+          return;
+        }
+
+        if (!_isValidScheduleTimeRange(_scheduleStartTime!, _scheduleEndTime!)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: const [
+                  Icon(Icons.warning, color: Colors.white, size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text('End time must be after start time'),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-          ),
-        );
-        return;
+          );
+          return;
+        }
+      } else if (_taskType == 'Activity') {
+        if (_activityDurationMinutes == null || _activityDurationMinutes! <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: const [
+                  Icon(Icons.warning, color: Colors.white, size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text('Please set a valid duration (minutes) for activity'),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+          return;
+        }
       }
     }
     
@@ -1369,7 +1413,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         // AI sessions are tied to the selected suggestion option.
         'sessions': selectedSessions.isNotEmpty ? selectedSessions : null,
       };
-    } else {
+    } else if (_taskType == 'Schedules') {
       // 🔧 Schedule: has fixed start/end time + recurring weekdays
       taskData = {
         'id': DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1383,6 +1427,23 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         'startTime': '${_scheduleStartTime!.hour.toString().padLeft(2, '0')}:${_scheduleStartTime!.minute.toString().padLeft(2, '0')}',
         'endTime': '${_scheduleEndTime!.hour.toString().padLeft(2, '0')}:${_scheduleEndTime!.minute.toString().padLeft(2, '0')}',
         'scheduleEndDate': _scheduleEndDate?.toIso8601String(), // 🆕 Optional end date
+        'notes': '',
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+    } else {
+      // 🔧 Activity: recurring with duration only (no fixed time of day)
+      final activityMinutes = (_activityDurationMinutes ?? 60).clamp(1, 24 * 60);
+      taskData = {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'name': _taskName,
+        'subject': _taskType,
+        'subjectColor': AppColors.subjectAccentColor(_taskType).toARGB32(),
+        'difficulty': _difficulty,
+        'category': _taskType,
+        'taskType': 'Activity',
+        'weekdays': _selectedWeekdays.toList(),
+        'scheduleEndDate': _scheduleEndDate?.toIso8601String(),
+        'estimatedMinutes': activityMinutes,
         'notes': '',
         'createdAt': DateTime.now().toIso8601String(),
       };
@@ -1765,8 +1826,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     const SizedBox(height: 16),
                   ],
                   
-                  // 3b. Start/End Time (for recurring types: Schedules/Activity)
-                  if (_taskType == 'Schedules' || _taskType == 'Activity') ...[
+                  // 3b. Time/Duration for recurring types
+                  if (_taskType == 'Schedules') ...[
                     _buildCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2041,6 +2102,37 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 ],
                               ),
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ] else if (_taskType == 'Activity') ...[
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('Duration (minutes)', Icons.timelapse),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _activityDurationController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: 'Enter duration in minutes',
+                              prefixIcon: const Icon(Icons.timer_outlined),
+                              filled: true,
+                              fillColor: AppColors.background,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            onChanged: (value) {
+                              final parsed = int.tryParse(value);
+                              setState(() {
+                                _activityDurationMinutes = parsed;
+                              });
+                            },
                           ),
                         ],
                       ),
@@ -2548,62 +2640,96 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     ),
                   
                   // 9. Generate Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _isGenerating ? null : _generateAIEstimate,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                  if (_taskType != 'Schedules')
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: _isGenerating ? null : _generateAIEstimate,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          disabledBackgroundColor: AppColors.textSecondary.withOpacity(0.3),
                         ),
-                        disabledBackgroundColor: AppColors.textSecondary.withOpacity(0.3),
+                        child: _isGenerating
+                            ? Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Generating...',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.auto_awesome, size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Generate Smart Schedule',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                       ),
-                      child: _isGenerating
-                          ? Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                ),
-                                SizedBox(width: 12),
-                                Text(
-                                  'Generating...',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(Icons.auto_awesome, size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Generate Smart Schedule',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
                     ),
-                  ),
+
+                  // Add Schedule button (Schedules only)
+                  if (_taskType == 'Schedules') ...[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: _addTaskToPlan,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add_task, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Add Schedule',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                   
                   // Add to Plan button (shows after AI preview)
-                  if (_showAIPreview) ...[
+                  if (_showAIPreview && _taskType != 'Schedules') ...[
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
