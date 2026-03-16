@@ -380,8 +380,8 @@ class StorageService {
     final tasks = getCustomTasks();
     
     for (var task in tasks) {
-      // 🔧 NEW: Check recurring schedules
-      if (task['taskType'] == 'Schedules' || task['taskType'] == 'Activity') {
+      // 🔧 NEW: Check recurring schedules (fixed time slots only)
+      if (task['taskType'] == 'Schedules') {
         final weekdays = task['weekdays'];
         final startTimeStr = task['startTime'];
         final endTimeStr = task['endTime'];
