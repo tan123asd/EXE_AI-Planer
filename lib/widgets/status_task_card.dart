@@ -7,6 +7,7 @@ class StatusTaskCard extends StatefulWidget {
   final String taskId;
   final String title;
   final String timeSlot;
+  final String? deadlineText;
   final String duration;
   final String difficulty;
   final String category;
@@ -22,6 +23,7 @@ class StatusTaskCard extends StatefulWidget {
     required this.taskId,
     required this.title,
     required this.timeSlot,
+    this.deadlineText,
     required this.duration,
     required this.difficulty,
     required this.category,
@@ -78,7 +80,7 @@ class _StatusTaskCardState extends State<StatusTaskCard>
   }
 
   Color _getAccentColor() {
-    return widget.accentColor ?? AppColors.subjectAccentColor(widget.subject);
+    return widget.accentColor ?? AppColors.subjectAccentColor(widget.category);
   }
 
   Color _getSurfaceColor() {
@@ -382,7 +384,29 @@ class _StatusTaskCardState extends State<StatusTaskCard>
                                         color: AppColors.textSecondary,
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
+                                    if (widget.deadlineText != null &&
+                                        widget.deadlineText!.trim().isNotEmpty) ...[
+                                      const SizedBox(width: 12),
+                                      Icon(
+                                        Icons.event_available_outlined,
+                                        size: 14,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          widget.deadlineText!,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                    ] else
+                                      const SizedBox(width: 12),
                                     
                                     // Category icon
                                     Icon(

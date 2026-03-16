@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/task.dart';
 import '../utils/constants.dart';
-import '../widgets/ai_coach_card.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/timeline_item.dart';
 import '../widgets/priority_task_card.dart';
 import '../widgets/status_task_card.dart';
-import '../widgets/progress_stats_card.dart';
 import '../widgets/performance_tracking_card.dart';
 import '../services/storage_service.dart';
 import 'new_task_input_screen.dart';
@@ -34,6 +32,11 @@ class _HomeScreenState extends State<HomeScreen> {
   int _dayStreak = 7;
   int _completedTasksCount = 0;
 
+  bool _isRecurringType(Map<String, dynamic> task) {
+    final type = (task['taskType'] ?? '').toString();
+    return type == 'Schedules' || type == 'Activity';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -53,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // 🆕 Filter tasks for today
       _todayTasks = allTasks.where((task) {
         // Schedules: check if today's weekday is in the weekdays list
-        if (task['taskType'] == 'Schedules') {
+        if (_isRecurringType(task)) {
           final weekdays = task['weekdays'];
           if (weekdays == null || weekdays is! List) return false;
           
@@ -156,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // 🔧 FIXED: Format time range from actual deadline or schedule times
   String _formatTimeRange(Map<String, dynamic> task) {
     // 🔧 For Schedules type - use fixed start/end time
-    if (task['taskType'] == 'Schedules') {
+    if (_isRecurringType(task)) {
       final startTime = task['startTime'];
       final endTime = task['endTime'];
       
@@ -256,6 +259,28 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String? _formatDeadlineLabel(Map<String, dynamic> task) {
+    if ((task['taskType'] ?? '').toString() != 'Task') {
+      return null;
+    }
+
+    final rawDeadline = task['deadline'];
+    if (rawDeadline == null) {
+      return null;
+    }
+
+    final deadline = DateTime.tryParse(rawDeadline.toString());
+    if (deadline == null) {
+      return null;
+    }
+
+    if (deadline.hour == 0 && deadline.minute == 0) {
+      return DateFormat('dd/MM').format(deadline);
+    }
+
+    return DateFormat('dd/MM • HH:mm').format(deadline);
+  }
+
   Color _getTimelineColor(int index) {
     final colors = [
       AppColors.timelineBlue,
@@ -328,32 +353,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _getSubjectLabel(Map<String, dynamic> task) {
-    final subject = task['subject'];
-    if (subject is String && subject.trim().isNotEmpty) {
-      return subject;
-    }
-
     final category = task['category'];
     if (category is String && category.trim().isNotEmpty) {
       return category;
+    }
+
+    final subject = task['subject'];
+    if (subject is String && subject.trim().isNotEmpty) {
+      return subject;
     }
 
     return 'Other';
   }
 
   Color _getSubjectColor(Map<String, dynamic> task) {
-    final raw = task['subjectColor'];
-    if (raw is int) {
-      return Color(raw);
-    }
-    if (raw is num) {
-      return Color(raw.toInt());
+    final category = task['category'];
+    if (category is String && category.trim().isNotEmpty) {
+      return AppColors.subjectAccentColor(category);
     }
     return AppColors.subjectAccentColor(_getSubjectLabel(task));
   }
 
   int _getTaskMinutes(Map<String, dynamic> task) {
-    if (task['taskType'] == 'Schedules') {
+    if (_isRecurringType(task)) {
       final start = task['startTime'];
       final end = task['endTime'];
       if (start is String && end is String) {
@@ -413,6 +435,226 @@ class _HomeScreenState extends State<HomeScreen> {
 
     breakdown.sort((a, b) => (b['minutes'] as int).compareTo(a['minutes'] as int));
     return breakdown;
+  }
+
+  String _buildCoachMessage() {
+    if (_todayTasks.isEmpty) {
+      return 'No tasks yet. Add your first item to generate a smarter plan.';
+    }
+    if (_todayTasks.any((task) => task['difficulty'] == 'Hard')) {
+      final hardTask = _todayTasks.firstWhere((task) => task['difficulty'] == 'Hard');
+      return 'Start with ${hardTask['name']}. It is the highest-effort item in your plan today.';
+    }
+    if (_completedTasksCount == _todayTasks.length) {
+      return 'Everything planned for today is completed. Keep the momentum going.';
+    }
+    return 'You have ${_todayTasks.length - _completedTasksCount} items left today. Finish the next one before switching context.';
+  }
+
+  Widget _buildOverviewMetric({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color tone,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.16),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.12),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: tone.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.78),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewCard() {
+    final completionRatio = _todayTasks.isEmpty
+        ? 0.0
+        : _completedTasksCount / _todayTasks.length;
+    final completionPercent = (completionRatio * 100).round();
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFF6B35), Color(0xFFFF8358)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.22),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.16),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.flash_on_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'TODAY OVERVIEW',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _buildCoachMessage(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.96),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'Plan completion',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '$_completedTasksCount/${_todayTasks.length} done · $completionPercent%',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.88),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    minHeight: 8,
+                    value: completionRatio,
+                    backgroundColor: Colors.white.withOpacity(0.18),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              _buildOverviewMetric(
+                icon: Icons.task_alt_rounded,
+                label: 'Tasks today',
+                value: '${_todayTasks.length}',
+                tone: const Color(0xFFFFE3D7),
+              ),
+              const SizedBox(width: 10),
+              _buildOverviewMetric(
+                icon: Icons.local_fire_department_rounded,
+                label: 'Day streak',
+                value: '$_dayStreak',
+                tone: const Color(0xFFFFD5D5),
+              ),
+              const SizedBox(width: 10),
+              _buildOverviewMetric(
+                icon: Icons.schedule_rounded,
+                label: 'Focus hours',
+                value: '${_totalFocusHours}h',
+                tone: const Color(0xFFFFE9D2),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSubjectAnalysisCard() {
@@ -530,26 +772,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: AppSpacing.lg),
-            
-            // AI Coach Card - Dynamic message
-            AICoachCard(
-              message: _todayTasks.isEmpty
-                  ? "Welcome! Add your first task to get started with AI-powered scheduling."
-                  : _todayTasks.any((t) => t['difficulty'] == 'Hard')
-                      ? "You're doing great! Let's focus on your ${_todayTasks.firstWhere((t) => t['difficulty'] == 'Hard')['name']} next. It's your hardest task today."
-                      : "Great job! Focus on completing your tasks one by one. You've got this!",
-            ),
-            
-            // Combined Progress & Stats Card
-            if (_todayTasks.isNotEmpty)
-              const SizedBox(height: AppSpacing.lg),
-            if (_todayTasks.isNotEmpty)
-              ProgressStatsCard(
-                completedTasks: _completedTasksCount,
-                totalTasks: _todayTasks.length,
-                dayStreak: _dayStreak,
-                focusHours: _totalFocusHours,
-              ),
+            _buildOverviewCard(),
 
             if (_todayTasks.isNotEmpty)
               const SizedBox(height: AppSpacing.md),
@@ -644,6 +867,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     taskId: _todayTasks[i]['id'] ?? '',
                     title: _todayTasks[i]['name'] ?? 'Untitled Task',
                     timeSlot: _formatTimeRange(_todayTasks[i]),
+                    deadlineText: _formatDeadlineLabel(_todayTasks[i]),
                     duration: '${_todayTasks[i]['estimatedTime'] ?? 1}h',
                     difficulty: _todayTasks[i]['difficulty'] ?? 'Medium',
                     category: _todayTasks[i]['category'] ?? 'General',
@@ -770,14 +994,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ] else ...[
               // Show recurring schedules
-              for (var task in _todayTasks.where((t) => t['taskType'] == 'Schedules')) ...[
+              for (var task in _todayTasks.where(_isRecurringType)) ...[
                 PriorityTaskCard(
                   title: task['name'] ?? 'Untitled Schedule',
                   subtitle: _formatScheduleSubtitle(task),
                   bestSlot: _formatTimeRange(task),
                   subject: _getSubjectLabel(task),
                   accentColor: _getSubjectColor(task),
-                  priority: 'Schedule', // Changed from difficulty
+                  priority: (task['taskType'] ?? 'Schedule').toString(),
                   onTap: null,
                 ),
               ],

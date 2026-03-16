@@ -49,6 +49,13 @@ class AppColors {
         return subjectHealth;
       case 'skill':
         return subjectSkill;
+      // Task types
+      case 'task':
+        return subjectStudy;     // orange
+      case 'schedules':
+        return subjectSkill;     // blue
+      case 'activity':
+        return subjectHealth;    // green
       default:
         return subjectOther;
     }

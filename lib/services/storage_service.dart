@@ -381,7 +381,7 @@ class StorageService {
     
     for (var task in tasks) {
       // 🔧 NEW: Check recurring schedules
-      if (task['taskType'] == 'Schedules') {
+      if (task['taskType'] == 'Schedules' || task['taskType'] == 'Activity') {
         final weekdays = task['weekdays'];
         final startTimeStr = task['startTime'];
         final endTimeStr = task['endTime'];
