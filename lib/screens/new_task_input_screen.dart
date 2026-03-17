@@ -39,6 +39,12 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   int? _selectedSuggestionIndex;
   String _lastGeneratedSignature = '';
   int? _activityDurationMinutes;
+  // Task: multi-select AI slots + custom slots
+  final Set<int> _selectedSuggestionIndices = {};
+  final List<Map<String, dynamic>> _customSlots = [];
+  DateTime? _customSlotDate;
+  TimeOfDay? _customSlotStart;
+  TimeOfDay? _customSlotEnd;
   
   // AI Preview data
   String _aiEstimatedEffort = '';
@@ -151,9 +157,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     String errorMessage = '';
     
     if (_taskType == 'Task') {
-      // Task validation: task title is enough to generate suggestions.
+      // Task validation: task title and description required.
       isValid = _formKey.currentState!.validate();
-      errorMessage = 'Please fill in task name';
+      errorMessage = 'Please fill in task name and description';
     } else if (_taskType == 'Schedules') {
       // Schedules validation: needs weekdays and start/end time
       isValid = _formKey.currentState!.validate() && 
@@ -280,6 +286,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         }
       } else {
         // Multi-session suggestions: generate multiple full plans (e.g. 7h -> 2h+2h+2h+1h).
+        // Hard: only one plan (time slots only, no Option 1/2/3).
+        final maxOptions = _difficulty == 'Hard' ? 1 : maxSuggestions;
         int remaining = totalMinutes;
         final sessionMinutesPlan = <int>[];
         while (remaining > 0) {
@@ -288,7 +296,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           remaining -= chunk;
         }
 
-        for (int optionIndex = 0; optionIndex < maxSuggestions; optionIndex++) {
+        for (int optionIndex = 0; optionIndex < maxOptions; optionIndex++) {
           DateTime searchFrom = now.add(Duration(hours: optionIndex));
           final optionSlots = <Map<String, DateTime>>[];
           final optionSessions = <Map<String, dynamic>>[];
@@ -331,7 +339,11 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           _aiSuggestedStartTimes.add(optionSlots.first['start']!);
           _aiSuggestedSessionGroups.add(optionSessions);
 
-          String optionText = 'Option ${optionIndex + 1} • ${optionSessions.length} sessions\n${optionLines.join('\n')}';
+          // Hard: show only time slots (no "Option 1" label)
+          final showOptionLabel = _difficulty != 'Hard';
+          String optionText = showOptionLabel
+              ? 'Option ${optionIndex + 1} • ${optionSessions.length} sessions\n${optionLines.join('\n')}'
+              : '${optionSessions.length} sessions\n${optionLines.join('\n')}';
           if (needsBreaks) {
             final workDuration = breakSettings['workDuration'];
             final breakDuration = breakSettings['breakDuration'];
@@ -341,6 +353,30 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           _aiSuggestedSlots.add(optionText);
         }
 
+        // Hard: flatten one multi-session option into one card per session (like Medium single-session display)
+        if (_difficulty == 'Hard' &&
+            _aiSuggestedSessionGroups.length == 1 &&
+            _aiSuggestedSessionGroups[0].length > 1) {
+          final sessions = _aiSuggestedSessionGroups[0];
+          _aiSuggestedSessionGroups = sessions
+              .map((s) => [Map<String, dynamic>.from(s)])
+              .toList();
+          _aiSuggestedSlots.clear();
+          _aiSuggestedStartTimes.clear();
+          for (int i = 0; i < sessions.length; i++) {
+            final start = DateTime.parse(sessions[i]['startTime'] as String);
+            final end = DateTime.parse(sessions[i]['endTime'] as String);
+            _aiSuggestedStartTimes.add(start);
+            String slotText = '${DateFormat('EEEE, MMM d').format(start)} • '
+                '${_formatTimeWith24H(start)} – ${_formatTimeWith24H(end, isRangeEnd: true)}';
+            if (needsBreaks) {
+              final workDuration = breakSettings['workDuration'];
+              slotText += '\n⏱️ Break after ${workDuration}min';
+            }
+            _aiSuggestedSlots.add(slotText);
+          }
+        }
+
         if (_aiSuggestedSlots.isEmpty) {
           _aiSuggestedSlots.add('⚠️ Schedule is too busy, consider rescheduling other tasks');
         }
@@ -348,7 +384,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
 
       if (_aiSuggestedStartTimes.isNotEmpty) {
         final defaultStart = _aiSuggestedStartTimes.first;
-        _selectedSuggestionIndex = 0;
+        _selectedSuggestionIndex = null;
+        _selectedSuggestionIndices.clear();
 
         // Keep manually entered deadline/time; auto-fill only when deadline is not manually set.
         if (!_isDeadlineManuallySet && (_deadline == null || _deadlineTime == null)) {
@@ -357,6 +394,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         }
       } else {
         _selectedSuggestionIndex = null;
+        _selectedSuggestionIndices.clear();
       }
 
       // Deep-copy AI sessions so user edits don't mutate the originals
@@ -385,10 +423,44 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           _aiEstimatedEffort = 'Recurring schedule';
           _aiSuggestedSlots.add('📅 Every $weekdaysText\n🕐 $startTimeText – $endTimeText');
         } else {
-          // Activity preview: duration only
+          // Activity: recommend concrete time slots on selected weekdays (e.g. 17:00–20:00 for 180 min)
           final mins = (_activityDurationMinutes ?? 0).clamp(1, 24 * 60);
           _aiEstimatedEffort = 'Recurring activity';
-          _aiSuggestedSlots.add('📅 Every $weekdaysText\n⏱️ ${_formatEstimatedEffort(mins)}');
+          _aiEstimatedMinutes = mins;
+          final usedSlots = <Map<String, DateTime>>[];
+          DateTime searchFrom = DateTime.now();
+          const maxSlots = 7;
+          while (_aiSuggestedSessionGroups.length < maxSlots) {
+            final slotStart = _findNextAvailableSlotWithTracking(mins, searchFrom, usedSlots);
+            if (slotStart == null) break;
+            if (!_selectedWeekdays.contains(slotStart.weekday)) {
+              searchFrom = DateTime(slotStart.year, slotStart.month, slotStart.day + 1, 0, 0);
+              continue;
+            }
+            final slotEnd = slotStart.add(Duration(minutes: mins));
+            usedSlots.add({'start': slotStart, 'end': slotEnd});
+            _aiSuggestedSessionGroups.add([
+              {
+                'startTime': slotStart.toIso8601String(),
+                'endTime': slotEnd.toIso8601String(),
+                'duration': mins,
+              }
+            ]);
+            _aiSuggestedStartTimes.add(slotStart);
+            final slotText = '${DateFormat('EEEE, MMM d').format(slotStart)} • '
+                '${_formatTimeWith24H(slotStart)} – ${_formatTimeWith24H(slotEnd, isRangeEnd: true)}';
+            _aiSuggestedSlots.add(slotText);
+            searchFrom = slotEnd.add(const Duration(minutes: 30));
+          }
+          if (_aiSuggestedSlots.isEmpty) {
+            _aiSuggestedSlots.add('📅 Every $weekdaysText\n⏱️ ${_formatEstimatedEffort(mins)}\n⚠️ No free slot on selected days in next 7 days');
+            _editedSessionGroups = [];
+          } else {
+            _editedSessionGroups = _aiSuggestedSessionGroups
+                .map((g) => g.map((s) => Map<String, dynamic>.from(s)).toList())
+                .toList();
+          }
+          _selectedSuggestionIndices.clear();
         }
 
         _lastGeneratedSignature = _buildPlanningSignature();
@@ -496,6 +568,11 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   void _invalidateAIPreviewState() {
     _showAIPreview = false;
     _selectedSuggestionIndex = null;
+    _selectedSuggestionIndices.clear();
+    _customSlots.clear();
+    _customSlotDate = null;
+    _customSlotStart = null;
+    _customSlotEnd = null;
     _aiEstimatedEffort = '';
     _aiEstimatedMinutes = null;
     _manualEstimatedMinutesOverride = null;
@@ -530,6 +607,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       startTime,
       endTime,
       _scheduleEndDate?.toIso8601String() ?? '',
+      _activityDurationMinutes?.toString() ?? '',
     ].join('|');
   }
 
@@ -569,8 +647,11 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       return 'S${e.key + 1}: ${DateFormat('EEE d').format(start)} '
           '${_formatTimeWith24H(start)}-${_formatTimeWith24H(end, isRangeEnd: true)}';
     }).toList();
-    String text =
-        'Option ${optionIndex + 1} • ${sessions.length} sessions\n${lines.join('\n')}';
+    // Hard: display only time slots (no "Option X" label)
+    final showOptionLabel = _difficulty != 'Hard';
+    String text = showOptionLabel
+        ? 'Option ${optionIndex + 1} • ${sessions.length} sessions\n${lines.join('\n')}'
+        : '${sessions.length} sessions\n${lines.join('\n')}';
     if (needsBreaks) {
       text +=
           '\n⏱️ ${breakSettings['workDuration']}min work / ${breakSettings['breakDuration']}min break';
@@ -1128,6 +1209,34 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 
+  /// Builds the unified "Selected Time" list: AI sessions from checked options + custom slots.
+  /// Each map has startTime, endTime, duration, and optionally _optionIndex/_sessionIndexInOption (AI) or _customIndex (custom).
+  List<Map<String, dynamic>> _getSelectedTimeSlots() {
+    final list = <Map<String, dynamic>>[];
+    final editedGroups = _editedSessionGroups.isNotEmpty ? _editedSessionGroups : _aiSuggestedSessionGroups;
+    for (final idx in _selectedSuggestionIndices) {
+      if (idx >= editedGroups.length) continue;
+      final sessions = editedGroups[idx];
+      for (int s = 0; s < sessions.length; s++) {
+        list.add({
+          ...Map<String, dynamic>.from(sessions[s]),
+          '_optionIndex': idx,
+          '_sessionIndexInOption': s,
+          '_customIndex': null,
+        });
+      }
+    }
+    for (int c = 0; c < _customSlots.length; c++) {
+      list.add({
+        ...Map<String, dynamic>.from(_customSlots[c]),
+        '_optionIndex': null,
+        '_sessionIndexInOption': null,
+        '_customIndex': c,
+      });
+    }
+    return list;
+  }
+
   String _formatTimeOfDay24H(TimeOfDay time, {bool isRangeEnd = false}) {
     if (isRangeEnd && time.hour == 0 && time.minute == 0) {
       return '24:00';
@@ -1208,8 +1317,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   }
 
   Future<void> _addTaskToPlan() async {
-    // Schedules are added directly (no AI generation required).
-    if (_taskType != 'Schedules' &&
+    // For Task type, require a fresh AI preview before adding.
+    if (_taskType == 'Task' &&
         (!_showAIPreview || _lastGeneratedSignature != _buildPlanningSignature())) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1322,6 +1431,27 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           );
           return;
         }
+        if (_showAIPreview && _aiSuggestedSessionGroups.isNotEmpty && _getSelectedTimeSlots().isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: const [
+                  Icon(Icons.warning, color: Colors.white, size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text('Please select at least one time slot or add your own'),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+          return;
+        }
       }
     }
     
@@ -1361,18 +1491,17 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     // 🆕 Get break settings
     final breakSettings = _storage.getBreakSettings();
 
-    // Use user-edited sessions if available, otherwise fall back to raw AI sessions
-    final sessionSource = _editedSessionGroups.isNotEmpty
-        ? _editedSessionGroups
-        : _aiSuggestedSessionGroups;
-    final selectedGroupIndex = (_selectedSuggestionIndex != null &&
-        _selectedSuggestionIndex! >= 0 &&
-        _selectedSuggestionIndex! < sessionSource.length)
-      ? _selectedSuggestionIndex!
-      : 0;
-    final selectedSessions = sessionSource.isNotEmpty
-      ? sessionSource[selectedGroupIndex]
-      : <Map<String, dynamic>>[];
+    // Task: use unified selected time (AI checked options + custom slots)
+    final selectedTimeSlots = _getSelectedTimeSlots();
+    final selectedSessions = selectedTimeSlots.map((m) {
+      final copy = Map<String, dynamic>.from(m);
+      copy.remove('_optionIndex');
+      copy.remove('_sessionIndexInOption');
+      copy.remove('_customIndex');
+      if (copy['startTime'] is DateTime) copy['startTime'] = (copy['startTime'] as DateTime).toIso8601String();
+      if (copy['endTime'] is DateTime) copy['endTime'] = (copy['endTime'] as DateTime).toIso8601String();
+      return copy;
+    }).toList();
     
     Map<String, dynamic> taskData;
     
@@ -1431,7 +1560,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         'createdAt': DateTime.now().toIso8601String(),
       };
     } else {
-      // 🔧 Activity: recurring with duration only (no fixed time of day)
+      // 🔧 Activity: recurring with duration; optional sessions when user selected AI/custom slots
       final activityMinutes = (_activityDurationMinutes ?? 60).clamp(1, 24 * 60);
       taskData = {
         'id': DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1444,6 +1573,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         'weekdays': _selectedWeekdays.toList(),
         'scheduleEndDate': _scheduleEndDate?.toIso8601String(),
         'estimatedMinutes': activityMinutes,
+        'sessions': selectedSessions.isNotEmpty ? selectedSessions : null,
         'notes': '',
         'createdAt': DateTime.now().toIso8601String(),
       };
@@ -1623,7 +1753,75 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. Task Title
+                  // 1. Category (Task / Schedules / Activity)
+                  _buildCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSectionLabel('Category', Icons.label_outlined),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: _taskTypes.map((type) {
+                            final isSelected = _taskType == type;
+                            return Expanded(
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  right: type != _taskTypes.last ? 8.0 : 0,
+                                ),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _taskType = type;
+                                      if (type == 'Task') {
+                                        _selectedWeekdays.clear();
+                                      } else {
+                                        _notesController.clear();
+                                        _notes = '';
+                                      }
+                                      _invalidateAIPreviewState();
+                                    });
+                                  },
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? AppColors.textSecondary.withOpacity(0.15)
+                                          : AppColors.background,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? AppColors.textPrimary
+                                            : Colors.transparent,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        type,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: isSelected
+                                              ? AppColors.textPrimary
+                                              : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // 2. Task Title
                   _buildCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1664,76 +1862,49 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                   ),
                   const SizedBox(height: 16),
                   
-                  // 2. Category (Task Type)
-                  _buildCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionLabel('Category', Icons.label_outlined),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: _taskTypes.map((type) {
-                            final isSelected = _taskType == type;
-                            
-                            return Expanded(
-                              child: Padding(
-                                padding: EdgeInsets.only(
-                                  right: type != _taskTypes.last ? 8.0 : 0,
-                                ),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _taskType = type;
-                                      // Reset weekdays if switching to Task
-                                      if (type == 'Task') {
-                                        _selectedWeekdays.clear();
-                                      } else {
-                                        _notesController.clear();
-                                        _notes = '';
-                                      }
-                                      _invalidateAIPreviewState();
-                                    });
-                                  },
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 14,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isSelected 
-                                          ? AppColors.textSecondary.withOpacity(0.15)
-                                          : AppColors.background,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: isSelected 
-                                            ? AppColors.textPrimary
-                                            : Colors.transparent,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        type,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: isSelected 
-                                              ? AppColors.textPrimary
-                                              : AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                  // 1b. Description (Task only, required)
+                  if (_taskType == 'Task') ...[
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('Description', Icons.description_outlined),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _notesController,
+                            maxLines: 4,
+                            decoration: InputDecoration(
+                              hintText: 'What needs to be done, key steps, and phases.',
+                              hintStyle: const TextStyle(
+                                color: Color(0xFFCCCCCC),
+                                fontSize: 14,
                               ),
-                            );
-                          }).toList(),
-                        ),
-                      ],
+                              filled: true,
+                              fillColor: AppColors.background,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.all(16),
+                            ),
+                            validator: (value) {
+                              if (_taskType == 'Task' && (value == null || value.trim().isEmpty)) {
+                                return 'Please enter a description';
+                              }
+                              return null;
+                            },
+                            onChanged: (_) {
+                              setState(() {
+                                _invalidateAIPreviewState();
+                              });
+                            },
+                            onSaved: (value) => _notes = value ?? '',
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                  ],
                   
                   // 2b. Weekday Selector (for recurring types: Schedules/Activity)
                   if (_taskType == 'Schedules' || _taskType == 'Activity') ...[
@@ -2247,44 +2418,6 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                   const SizedBox(height: 16),
                 ],
                   
-                  // 7. Notes (Task only)
-                  if (_taskType == 'Task') ...[
-                    _buildCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildSectionLabel('Notes (Optional)', Icons.note_outlined),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _notesController,
-                            maxLines: 4,
-                            decoration: InputDecoration(
-                              hintText: 'Extra information for the AI...',
-                              hintStyle: const TextStyle(
-                                color: Color(0xFFCCCCCC),
-                                fontSize: 14,
-                              ),
-                              filled: true,
-                              fillColor: AppColors.background,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.all(16),
-                            ),
-                            onChanged: (_) {
-                              setState(() {
-                                _invalidateAIPreviewState();
-                              });
-                            },
-                            onSaved: (value) => _notes = value ?? '',
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                  
                   // 8. AI Preview Section
                   if (_showAIPreview)
                     FadeTransition(
@@ -2328,9 +2461,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     ),
                                   ),
                                   const SizedBox(width: 12),
-                                  const Text(
-                                    'AI Estimate',
-                                    style: TextStyle(
+                                  Text(
+                                    _taskType == 'Task' ? 'AI recommendation' : 'AI Estimate',
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
                                       color: AppColors.textPrimary,
@@ -2408,7 +2541,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   ),
                                   const SizedBox(width: 4),
                                   const Text(
-                                    'Tap to select  •  Tap ',
+                                    'Tap to select/deselect  •  Tap ',
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: AppColors.textSecondary,
@@ -2431,7 +2564,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               const SizedBox(height: 10),
                               ..._aiSuggestedSlots.asMap().entries.map((entry) {
                                 final index = entry.key;
-                                final isSelected = _selectedSuggestionIndex == index;
+                                final isSelected = _selectedSuggestionIndices.contains(index);
                                 final editedSet = _userEditedOptions ?? <int>{};
                                 final editedGroups = _editedSessionGroups ?? <List<Map<String, dynamic>>>[];
                                 final isEdited = editedSet.contains(index);
@@ -2457,62 +2590,17 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   child: InkWell(
                                     onTap: () {
                                       setState(() {
-                                        _selectedSuggestionIndex = index;
+                                        if (isSelected) {
+                                          _selectedSuggestionIndices.remove(index);
+                                        } else {
+                                          _selectedSuggestionIndices.add(index);
+                                          if (index < _aiSuggestedStartTimes.length && !_isDeadlineManuallySet && _deadline == null) {
+                                            final suggestedTime = _aiSuggestedStartTimes[index];
+                                            _deadline = DateTime(suggestedTime.year, suggestedTime.month, suggestedTime.day);
+                                            _deadlineTime = TimeOfDay(hour: suggestedTime.hour, minute: suggestedTime.minute);
+                                          }
+                                        }
                                       });
-
-                                      if (index < _aiSuggestedStartTimes.length &&
-                                          !_isDeadlineManuallySet) {
-                                        final suggestedTime =
-                                            _aiSuggestedStartTimes[index];
-                                        setState(() {
-                                          _deadline = DateTime(
-                                            suggestedTime.year,
-                                            suggestedTime.month,
-                                            suggestedTime.day,
-                                          );
-                                          _deadlineTime = TimeOfDay(
-                                            hour: suggestedTime.hour,
-                                            minute: suggestedTime.minute,
-                                          );
-                                        });
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Row(
-                                              children: const [
-                                                Icon(Icons.check_circle,
-                                                    color: Colors.white, size: 18),
-                                                SizedBox(width: 8),
-                                                Text('✨ Session plan selected, deadline set!'),
-                                              ],
-                                            ),
-                                            backgroundColor: AppColors.success,
-                                            duration: const Duration(seconds: 1),
-                                            behavior: SnackBarBehavior.floating,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                          ),
-                                        );
-                                      } else {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Row(
-                                              children: const [
-                                                Icon(Icons.check_circle,
-                                                    color: Colors.white, size: 18),
-                                                SizedBox(width: 8),
-                                                Text('✨ Session plan selected. Deadline unchanged.'),
-                                              ],
-                                            ),
-                                            backgroundColor: AppColors.success,
-                                            duration: const Duration(seconds: 1),
-                                            behavior: SnackBarBehavior.floating,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                          ),
-                                        );
-                                      }
                                     },
                                     borderRadius: BorderRadius.circular(12),
                                     child: Padding(
@@ -2633,6 +2721,284 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   ),
                                 );
                               }).toList(),
+                              // Create your own slot (Task & Activity)
+                              if (_taskType == 'Task' || _taskType == 'Activity') ...[
+                                const SizedBox(height: 20),
+                                const Text(
+                                  'Create your own slot',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: InkWell(
+                                        onTap: () async {
+                                          final picked = await showDatePicker(
+                                            context: context,
+                                            initialDate: _customSlotDate ?? DateTime.now(),
+                                            firstDate: DateTime.now(),
+                                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                                            builder: (c, child) => Theme(
+                                              data: Theme.of(context).copyWith(
+                                                colorScheme: ColorScheme.light(
+                                                  primary: AppColors.primary,
+                                                  onPrimary: Colors.white,
+                                                  surface: Colors.white,
+                                                  onSurface: AppColors.textPrimary,
+                                                ),
+                                              ),
+                                              child: child!,
+                                            ),
+                                          );
+                                          if (picked != null) setState(() => _customSlotDate = picked);
+                                        },
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(color: Colors.grey.shade300),
+                                          ),
+                                          child: Text(
+                                            _customSlotDate != null
+                                                ? DateFormat('dd/MM/yyyy').format(_customSlotDate!)
+                                                : 'dd/mm/yyyy',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: _customSlotDate != null ? AppColors.textPrimary : AppColors.textSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: InkWell(
+                                        onTap: () async {
+                                          final picked = await showTimePicker(
+                                            context: context,
+                                            initialTime: _customSlotStart ?? TimeOfDay.now(),
+                                            builder: (c, child) => Theme(
+                                              data: Theme.of(context).copyWith(
+                                                colorScheme: ColorScheme.light(
+                                                  primary: AppColors.primary,
+                                                  onPrimary: Colors.white,
+                                                  surface: Colors.white,
+                                                  onSurface: AppColors.textPrimary,
+                                                ),
+                                              ),
+                                              child: child!,
+                                            ),
+                                          );
+                                          if (picked != null) setState(() => _customSlotStart = picked);
+                                        },
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(color: Colors.grey.shade300),
+                                          ),
+                                          child: Text(
+                                            _customSlotStart != null
+                                                ? '${_customSlotStart!.hour.toString().padLeft(2, '0')}:${_customSlotStart!.minute.toString().padLeft(2, '0')}'
+                                                : 'Start',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: _customSlotStart != null ? AppColors.textPrimary : AppColors.textSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: InkWell(
+                                        onTap: () async {
+                                          final picked = await showTimePicker(
+                                            context: context,
+                                            initialTime: _customSlotEnd ?? TimeOfDay(hour: 10, minute: 0),
+                                            builder: (c, child) => Theme(
+                                              data: Theme.of(context).copyWith(
+                                                colorScheme: ColorScheme.light(
+                                                  primary: AppColors.primary,
+                                                  onPrimary: Colors.white,
+                                                  surface: Colors.white,
+                                                  onSurface: AppColors.textPrimary,
+                                                ),
+                                              ),
+                                              child: child!,
+                                            ),
+                                          );
+                                          if (picked != null) setState(() => _customSlotEnd = picked);
+                                        },
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(color: Colors.grey.shade300),
+                                          ),
+                                          child: Text(
+                                            _customSlotEnd != null
+                                                ? '${_customSlotEnd!.hour.toString().padLeft(2, '0')}:${_customSlotEnd!.minute.toString().padLeft(2, '0')}'
+                                                : 'End',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: _customSlotEnd != null ? AppColors.textPrimary : AppColors.textSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    SizedBox(
+                                      child: ElevatedButton(
+                                        onPressed: () {
+                                          if (_customSlotDate == null || _customSlotStart == null || _customSlotEnd == null) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Please set date, start and end time'),
+                                                behavior: SnackBarBehavior.floating,
+                                              ),
+                                            );
+                                            return;
+                                          }
+                                          final startMin = _customSlotStart!.hour * 60 + _customSlotStart!.minute;
+                                          final endMin = _customSlotEnd!.hour * 60 + _customSlotEnd!.minute;
+                                          if (endMin <= startMin) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('End time must be after start time'),
+                                                behavior: SnackBarBehavior.floating,
+                                              ),
+                                            );
+                                            return;
+                                          }
+                                          final sh = _customSlotStart!.hour.clamp(0, 23);
+                                          final sm = _customSlotStart!.minute.clamp(0, 59);
+                                          final eh = _customSlotEnd!.hour.clamp(0, 23);
+                                          final em = _customSlotEnd!.minute.clamp(0, 59);
+                                          final start = DateTime(
+                                            _customSlotDate!.year,
+                                            _customSlotDate!.month,
+                                            _customSlotDate!.day,
+                                            sh,
+                                            sm,
+                                          );
+                                          final end = DateTime(
+                                            _customSlotDate!.year,
+                                            _customSlotDate!.month,
+                                            _customSlotDate!.day,
+                                            eh,
+                                            em,
+                                          );
+                                          final duration = end.difference(start).inMinutes;
+                                          setState(() {
+                                            _customSlots.add({
+                                              'startTime': start.toIso8601String(),
+                                              'endTime': end.toIso8601String(),
+                                              'duration': duration,
+                                            });
+                                            _customSlotDate = null;
+                                            _customSlotStart = null;
+                                            _customSlotEnd = null;
+                                          });
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primary,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                        child: const Text('Add'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                              // Selected Time (Task & Activity)
+                              if ((_taskType == 'Task' || _taskType == 'Activity') && _getSelectedTimeSlots().isNotEmpty) ...[
+                                const SizedBox(height: 20),
+                                const Text(
+                                  'Selected Time',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                ..._getSelectedTimeSlots().asMap().entries.map((entry) {
+                                  final i = entry.key;
+                                  final m = entry.value;
+                                  final startStr = m['startTime'];
+                                  final endStr = m['endTime'];
+                                  DateTime start;
+                                  DateTime end;
+                                  try {
+                                    start = startStr is DateTime ? startStr : DateTime.parse(startStr as String);
+                                    end = endStr is DateTime ? endStr : DateTime.parse(endStr as String);
+                                  } catch (_) {
+                                    start = DateTime.now();
+                                    end = start.add(const Duration(hours: 1));
+                                  }
+                                  final optionIndex = m['_optionIndex'] as int?;
+                                  final sessionIndexInOption = m['_sessionIndexInOption'] as int?;
+                                  final customIndex = m['_customIndex'] as int?;
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: Colors.grey.shade200),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            '${DateFormat('d/M/yyyy').format(start)}  ${_formatTimeWith24H(start)} – ${_formatTimeWith24H(end, isRangeEnd: true)}',
+                                            style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                                          ),
+                                        ),
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              if (customIndex != null) {
+                                                _customSlots.removeAt(customIndex);
+                                              } else if (optionIndex != null && sessionIndexInOption != null) {
+                                                if (_editedSessionGroups.length > optionIndex) {
+                                                  _editedSessionGroups[optionIndex].removeAt(sessionIndexInOption);
+                                                  if (_editedSessionGroups[optionIndex].isEmpty) {
+                                                    _selectedSuggestionIndices.remove(optionIndex);
+                                                  }
+                                                }
+                                              }
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(6),
+                                            child: Icon(
+                                              Icons.cancel_outlined,
+                                              size: 20,
+                                              color: const Color(0xFFD4A20A),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                              ],
                             ],
                           ),
                         ),
