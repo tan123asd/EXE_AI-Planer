@@ -125,6 +125,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _handleTaskStatusChange(String taskId, TaskStatus newStatus) async {
+    // If this is a session item, it has composite id: "<taskId>::<sessionIndex>"
+    if (taskId.contains('::')) {
+      final parts = taskId.split('::');
+      if (parts.length == 2) {
+        final parentId = parts[0];
+        final sessionIndex = int.tryParse(parts[1]);
+        if (sessionIndex != null) {
+          await _storage.setTaskSessionCompleted(
+            parentId,
+            sessionIndex: sessionIndex,
+            isCompleted: newStatus == TaskStatus.completed,
+          );
+          _loadData();
+          return;
+        }
+      }
+    }
+
     String statusString = 'pending';
     if (newStatus == TaskStatus.completed) {
       statusString = 'completed';
@@ -137,6 +155,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   TaskStatus _getTaskStatus(String taskId) {
+    if (taskId.contains('::')) {
+      final parts = taskId.split('::');
+      if (parts.length == 2) {
+        final parentId = parts[0];
+        final sessionIndex = int.tryParse(parts[1]);
+        if (sessionIndex != null) {
+          final tasks = _storage.getCustomTasks();
+          final t = tasks.firstWhere(
+            (m) => (m['id'] ?? '').toString() == parentId,
+            orElse: () => <String, dynamic>{},
+          );
+          final sessions = t['sessions'];
+          if (sessions is List &&
+              sessionIndex >= 0 &&
+              sessionIndex < sessions.length) {
+            final s = sessions[sessionIndex];
+            if (s is Map && s['isCompleted'] == true) {
+              return TaskStatus.completed;
+            }
+          }
+          return TaskStatus.pending;
+        }
+      }
+    }
+
     if (_storage.isTaskCompleted(taskId)) {
       return TaskStatus.completed;
     } else if (_storage.isTaskInProgress(taskId)) {
@@ -162,6 +205,32 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isRecurringType(task)) {
       final type = (task['taskType'] ?? '').toString();
       if (type == 'Activity') {
+        // If Activity has concrete sessions, show today's sessions time range(s)
+        final sessions = task['sessions'];
+        if (sessions is List && sessions.isNotEmpty) {
+          final today = DateTime.now();
+          final todayDate = DateTime(today.year, today.month, today.day);
+          final todayRanges = <String>[];
+          for (final session in sessions) {
+            if (session is! Map) continue;
+            try {
+              final st = DateTime.parse((session['startTime'] ?? '').toString());
+              final en = DateTime.parse((session['endTime'] ?? '').toString());
+              final sd = DateTime(st.year, st.month, st.day);
+              if (!sd.isAtSameMomentAs(todayDate)) continue;
+              todayRanges.add(
+                '${_formatTimeWith24H(st)} - ${_formatTimeWith24H(en, isRangeEnd: true)}',
+              );
+            } catch (_) {
+              // ignore bad session parse
+            }
+          }
+          if (todayRanges.isNotEmpty) {
+            if (todayRanges.length == 1) return todayRanges.first;
+            return '${todayRanges.length} sessions\n${todayRanges.join('\n')}';
+          }
+        }
+
         final est = task['estimatedMinutes'];
         int? minutes;
         if (est is int && est > 0) {
@@ -195,12 +264,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (task['taskType'] == 'Task') {
       final sessions = task['sessions'];
       
-      // 🆕 If task has sessions, find today's session
+      // 🆕 If task has sessions, list today's sessions (not just the first one)
       if (sessions != null && sessions is List && sessions.isNotEmpty) {
         final today = DateTime.now();
         final todayDate = DateTime(today.year, today.month, today.day);
-        
-        // Find session for today
+
+        final todayRanges = <String>[];
         for (var session in sessions) {
           try {
             final sessionStart = DateTime.parse(session['startTime']);
@@ -208,11 +277,18 @@ class _HomeScreenState extends State<HomeScreen> {
             final sessionDate = DateTime(sessionStart.year, sessionStart.month, sessionStart.day);
             
             if (sessionDate.isAtSameMomentAs(todayDate)) {
-              return '${_formatTimeWith24H(sessionStart)} - ${_formatTimeWith24H(sessionEnd, isRangeEnd: true)}';
+              todayRanges.add(
+                '${_formatTimeWith24H(sessionStart)} - ${_formatTimeWith24H(sessionEnd, isRangeEnd: true)}',
+              );
             }
           } catch (e) {
             // Continue to next session
           }
+        }
+
+        if (todayRanges.isNotEmpty) {
+          if (todayRanges.length == 1) return todayRanges.first;
+          return '${todayRanges.length} sessions\n${todayRanges.join('\n')}';
         }
       }
       
@@ -888,26 +964,139 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ] else ...[
               for (int i = 0; i < _todayTasks.length && i < 5; i++) ...[
-                (() {
-                  final subject = _getSubjectLabel(_todayTasks[i]);
-                  final subjectColor = _getSubjectColor(_todayTasks[i]);
-                  return StatusTaskCard(
-                    taskId: _todayTasks[i]['id'] ?? '',
-                    title: _todayTasks[i]['name'] ?? 'Untitled Task',
-                    timeSlot: _formatTimeRange(_todayTasks[i]),
-                    deadlineText: _formatDeadlineLabel(_todayTasks[i]),
-                    duration: '${_todayTasks[i]['estimatedTime'] ?? 1}h',
-                    difficulty: _todayTasks[i]['difficulty'] ?? 'Medium',
-                    category: _todayTasks[i]['category'] ?? 'General',
-                    subject: subject,
-                    accentColor: subjectColor,
-                    status: _getTaskStatus(_todayTasks[i]['id'] ?? ''),
-                    onStatusChanged: _handleTaskStatusChange,
-                    onDelete: () async {
-                      await _storage.deleteCustomTask(_todayTasks[i]['id'] ?? '');
-                      _loadData();
-                    },
-                  );
+                ...(() {
+                  final task = _todayTasks[i];
+                  final taskType = (task['taskType'] ?? '').toString();
+                  if (taskType == 'Task') {
+                    final sessions = task['sessions'];
+                    if (sessions is List && sessions.isNotEmpty) {
+                      final today = DateTime.now();
+                      final todayDate =
+                          DateTime(today.year, today.month, today.day);
+                      final widgets = <Widget>[];
+                      for (int si = 0; si < sessions.length; si++) {
+                        final s = sessions[si];
+                        if (s is! Map) continue;
+                        try {
+                          final st = DateTime.parse((s['startTime'] ?? '').toString());
+                          final en = DateTime.parse((s['endTime'] ?? '').toString());
+                          final sd = DateTime(st.year, st.month, st.day);
+                          if (!sd.isAtSameMomentAs(todayDate)) continue;
+                          final subject = _getSubjectLabel(task);
+                          final subjectColor = _getSubjectColor(task);
+                          final compositeId =
+                              '${(task['id'] ?? '').toString()}::$si';
+                          final durMin =
+                              (s['duration'] is int ? s['duration'] as int : null) ??
+                                  en.difference(st).inMinutes;
+                          final durText = durMin >= 60
+                              ? '${(durMin / 60).floor()}h'
+                              : '${durMin}m';
+                          widgets.add(
+                            StatusTaskCard(
+                              taskId: compositeId,
+                              title: '${task['name'] ?? 'Untitled Task'} • Part ${si + 1}/${sessions.length}',
+                              timeSlot:
+                                  '${_formatTimeWith24H(st)} - ${_formatTimeWith24H(en, isRangeEnd: true)}',
+                              deadlineText: _formatDeadlineLabel(task),
+                              duration: durText,
+                              difficulty: task['difficulty'] ?? 'Medium',
+                              category: task['category'] ?? 'General',
+                              subject: subject,
+                              accentColor: subjectColor,
+                              status: _getTaskStatus(compositeId),
+                              onStatusChanged: _handleTaskStatusChange,
+                              onDelete: () async {
+                                await _storage.deleteCustomTask(
+                                    (task['id'] ?? '').toString());
+                                _loadData();
+                              },
+                            ),
+                          );
+                        } catch (_) {
+                          // ignore bad session parse
+                        }
+                      }
+                      if (widgets.isNotEmpty) return widgets;
+                    }
+                  }
+                  if (taskType == 'Activity') {
+                    final sessions = task['sessions'];
+                    if (sessions is List && sessions.isNotEmpty) {
+                      final today = DateTime.now();
+                      final todayDate =
+                          DateTime(today.year, today.month, today.day);
+                      final widgets = <Widget>[];
+                      for (int si = 0; si < sessions.length; si++) {
+                        final s = sessions[si];
+                        if (s is! Map) continue;
+                        try {
+                          final st = DateTime.parse((s['startTime'] ?? '').toString());
+                          final en = DateTime.parse((s['endTime'] ?? '').toString());
+                          final sd = DateTime(st.year, st.month, st.day);
+                          if (!sd.isAtSameMomentAs(todayDate)) continue;
+                          final subject = _getSubjectLabel(task);
+                          final subjectColor = _getSubjectColor(task);
+                          final compositeId =
+                              '${(task['id'] ?? '').toString()}::$si';
+                          final durMin =
+                              (s['duration'] is int ? s['duration'] as int : null) ??
+                                  en.difference(st).inMinutes;
+                          final durText = durMin >= 60
+                              ? '${(durMin / 60).floor()}h'
+                              : '${durMin}m';
+                          widgets.add(
+                            StatusTaskCard(
+                              taskId: compositeId,
+                              title:
+                                  '${task['name'] ?? 'Untitled Activity'} • Session ${si + 1}/${sessions.length}',
+                              timeSlot:
+                                  '${_formatTimeWith24H(st)} - ${_formatTimeWith24H(en, isRangeEnd: true)}',
+                              deadlineText: _formatDeadlineLabel(task),
+                              duration: durText,
+                              difficulty: task['difficulty'] ?? 'Medium',
+                              category: 'Activity',
+                              subject: subject,
+                              accentColor: subjectColor,
+                              status: _getTaskStatus(compositeId),
+                              onStatusChanged: _handleTaskStatusChange,
+                              onDelete: () async {
+                                await _storage.deleteCustomTask(
+                                    (task['id'] ?? '').toString());
+                                _loadData();
+                              },
+                            ),
+                          );
+                        } catch (_) {
+                          // ignore bad session parse
+                        }
+                      }
+                      if (widgets.isNotEmpty) return widgets;
+                    }
+                  }
+
+                  // Default: render the task as-is.
+                  final subject = _getSubjectLabel(task);
+                  final subjectColor = _getSubjectColor(task);
+                  return [
+                    StatusTaskCard(
+                      taskId: task['id'] ?? '',
+                      title: task['name'] ?? 'Untitled Task',
+                      timeSlot: _formatTimeRange(task),
+                      deadlineText: _formatDeadlineLabel(task),
+                      duration: '${task['estimatedTime'] ?? 1}h',
+                      difficulty: task['difficulty'] ?? 'Medium',
+                      category: task['category'] ?? 'General',
+                      subject: subject,
+                      accentColor: subjectColor,
+                      status: _getTaskStatus(task['id'] ?? ''),
+                      onStatusChanged: _handleTaskStatusChange,
+                      onDelete: () async {
+                        await _storage.deleteCustomTask(task['id'] ?? '');
+                        _loadData();
+                      },
+                    ),
+                  ];
                 })(),
               ],
             ],

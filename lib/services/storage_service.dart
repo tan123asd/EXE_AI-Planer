@@ -157,6 +157,40 @@ class StorageService {
     await saveCustomTasks(tasks);
   }
 
+  Future<void> setTaskSessionCompleted(
+    String taskId, {
+    required int sessionIndex,
+    required bool isCompleted,
+  }) async {
+    final tasks = getCustomTasks();
+    final taskIndex = tasks.indexWhere((t) => (t['id'] ?? '').toString() == taskId);
+    if (taskIndex == -1) return;
+
+    final task = Map<String, dynamic>.from(tasks[taskIndex]);
+    final sessionsAny = task['sessions'];
+    if (sessionsAny is! List) return;
+    if (sessionIndex < 0 || sessionIndex >= sessionsAny.length) return;
+
+    final sessions = sessionsAny.map((e) => e is Map ? Map<String, dynamic>.from(e) : e).toList();
+    final s = sessions[sessionIndex];
+    if (s is! Map<String, dynamic>) return;
+    s['isCompleted'] = isCompleted;
+    sessions[sessionIndex] = s;
+    task['sessions'] = sessions;
+
+    // If a Task has sessions, consider it completed only when all sessions are completed.
+    final allDone = sessions
+        .whereType<Map<String, dynamic>>()
+        .isNotEmpty &&
+        sessions
+            .whereType<Map<String, dynamic>>()
+            .every((m) => m['isCompleted'] == true);
+    task['isCompleted'] = allDone;
+
+    tasks[taskIndex] = task;
+    await saveCustomTasks(tasks);
+  }
+
   Future<void> deleteCustomTask(String taskId) async {
     final tasks = getCustomTasks();
     tasks.removeWhere((task) => task['id'] == taskId);

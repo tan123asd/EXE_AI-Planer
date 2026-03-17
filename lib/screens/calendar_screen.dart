@@ -1,10 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
-import '../models/task.dart';
-import '../models/schedule_item.dart';
 import '../services/storage_service.dart';
-import '../widgets/task_card.dart';
-import '../widgets/schedule_card.dart';
+import '../widgets/day_timeline.dart';
+import '../widgets/task_detail_sheet.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({Key? key}) : super(key: key);
@@ -16,8 +15,7 @@ class CalendarScreen extends StatefulWidget {
 class _CalendarScreenState extends State<CalendarScreen> {
   final StorageService _storage = StorageService();
   DateTime _selectedDate = DateTime.now();
-  List<Task> _allTasks = [];
-  List<ScheduleItem> _allSchedule = [];
+  List<Map<String, dynamic>> _allCustomTasks = [];
   bool _isLoading = true;
 
   @override
@@ -29,450 +27,249 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
 
-    // Load tasks
-    final customTasks = await _storage.getCustomTasks();
-    _allTasks = customTasks.map((item) {
-      DateTime? deadline;
-      if (item['deadline'] != null) {
-        try {
-          deadline = DateTime.parse(item['deadline']);
-        } catch (e) {
-          deadline = null;
-        }
-      }
-      
-      return Task(
-        id: item['id'] ?? DateTime.now().toString(),
-        name: item['name'] ?? 'Untitled',
-        subject: item['subject'] ?? 'General',
-        time: _formatTaskTime(item),
-        difficulty: item['difficulty'] ?? 'Medium',
-        isCompleted: item['isCompleted'] ?? false,
-        deadline: deadline,
-        category: item['category'] ?? 'Study',
-        estimatedTime: item['estimatedTime'],
-      );
-    }).toList();
-
-    // Load schedule
-    final savedSchedule = await _storage.getGeneratedSchedule();
-    _allSchedule = savedSchedule.map((item) {
-      return ScheduleItem(
-        id: item['id'] ?? DateTime.now().toString(),
-        day: item['day'] ?? 'Monday',
-        time: item['time'] ?? '00:00',
-        title: item['title'] ?? 'Untitled',
-        subject: item['subject'] ?? 'General',
-        difficulty: item['difficulty'] ?? 'Medium',
-      );
-    }).toList();
-
+    _allCustomTasks = _storage.getCustomTasks();
     setState(() => _isLoading = false);
   }
 
-  String _formatTaskTime(Map<String, dynamic> item) {
-    if (item['deadline'] != null) {
+  List<dynamic>? _extractSessions(dynamic raw) {
+    if (raw is List) return raw;
+    if (raw is String) {
       try {
-        final deadline = DateTime.parse(item['deadline']);
-        final hour = deadline.hour;
-        final minute = deadline.minute.toString().padLeft(2, '0');
-        final period = hour >= 12 ? 'PM' : 'AM';
-        final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-        return '$displayHour:$minute $period';
-      } catch (e) {
-        return '08:00 AM';
+        final decoded = jsonDecode(raw);
+        if (decoded is List) return decoded;
+      } catch (_) {
+        return null;
       }
     }
-    return '08:00 AM';
+    return null;
   }
 
-  String _getDayName(DateTime date) {
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    return days[date.weekday - 1];
-  }
+  List<DayTimelineEvent> _getSessionEventsForDate(DateTime date) {
+    final events = <DayTimelineEvent>[];
+    for (final task in _allCustomTasks) {
+      final sessions = _extractSessions(task['sessions']);
+      if (sessions == null || sessions.isEmpty) continue;
+      final taskId = (task['id'] ?? '').toString();
+      final title = (task['name'] ?? 'Untitled').toString();
+      final subject = (task['subject'] ?? task['taskType'] ?? 'Task').toString();
 
-  List<ScheduleItem> _getScheduleForDay(String dayName) {
-    return _allSchedule.where((item) => item.day == dayName).toList();
-  }
-  
-  // 🆕 Filter tasks by selected date
-  List<Task> _getTasksForSelectedDate() {
-    return _allTasks.where((task) {
-      if (task.deadline == null) return false;
-      
-      return task.deadline!.year == _selectedDate.year &&
-             task.deadline!.month == _selectedDate.month &&
-             task.deadline!.day == _selectedDate.day;
-    }).toList();
-  }
+      for (int i = 0; i < sessions.length; i++) {
+        final s = sessions[i];
+        if (s is! Map) continue;
+        final start = DateTime.tryParse((s['startTime'] ?? '').toString());
+        final end = DateTime.tryParse((s['endTime'] ?? '').toString());
+        if (start == null || end == null) continue;
+        final sessionCompleted = s['isCompleted'] == true;
 
-  // 🆕 Get all days in month for calendar grid
-  List<DateTime?> _getMonthDays() {
-    final firstDayOfMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
-    final lastDayOfMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0);
-    
-    // Calculate empty cells before first day (Monday = 1, Sunday = 7)
-    final startWeekday = firstDayOfMonth.weekday;
-    final emptyDaysBefore = startWeekday - 1;
-    
-    List<DateTime?> days = [];
-    
-    // Add empty cells
-    for (int i = 0; i < emptyDaysBefore; i++) {
-      days.add(null);
+        if (start.year == date.year &&
+            start.month == date.month &&
+            start.day == date.day) {
+          events.add(
+            DayTimelineEvent(
+              id: '${taskId}_$i',
+              taskId: taskId,
+              sessionIndex: i,
+              title: title,
+              subject: subject,
+              start: start,
+              end: end,
+              isCompleted: sessionCompleted,
+            ),
+          );
+        }
+      }
     }
-    
-    // Add actual days
-    for (int day = 1; day <= lastDayOfMonth.day; day++) {
-      days.add(DateTime(_selectedDate.year, _selectedDate.month, day));
-    }
-    
-    return days;
+    return events;
   }
-  
-  // 🆕 Check if date has tasks
-  bool _hasTasksOnDate(DateTime date) {
-    return _allTasks.any((task) {
-      if (task.deadline == null) return false;
-      return task.deadline!.year == date.year &&
-             task.deadline!.month == date.month &&
-             task.deadline!.day == date.day;
-    });
+
+  Map<String, dynamic>? _findTaskById(String taskId) {
+    for (final t in _allCustomTasks) {
+      if ((t['id'] ?? '').toString() == taskId) return t;
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedDayName = _getDayName(_selectedDate);
-    final scheduleForDay = _getScheduleForDay(selectedDayName);
-    final tasksForDay = _getTasksForSelectedDate();
+    final day1 = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final day2 = day1.add(const Duration(days: 1));
+    final eventsDay1 = _getSessionEventsForDate(day1);
+    final eventsDay2 = _getSessionEventsForDate(day2);
+    final viewDay1 = _computeHourViewport(eventsDay1);
+    final viewDay2 = _computeHourViewport(eventsDay2);
+    final totalCount = eventsDay1.length + eventsDay2.length;
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Calendar',
-            style: AppTextStyles.heading1,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          
-          // Month Navigation
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left),
-                onPressed: () {
-                  setState(() {
-                    _selectedDate = DateTime(
-                      _selectedDate.year,
-                      _selectedDate.month - 1,
-                      _selectedDate.day,
-                    );
-                  });
-                },
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _getMonthName(_selectedDate.month),
+                    style: AppTextStyles.heading1.copyWith(fontSize: 26),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${_selectedDate.year}, Vietnam',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                '${_getMonthName(_selectedDate.month)} ${_selectedDate.year}',
-                style: AppTextStyles.heading2,
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right),
-                onPressed: () {
-                  setState(() {
-                    _selectedDate = DateTime(
-                      _selectedDate.year,
-                      _selectedDate.month + 1,
-                      _selectedDate.day,
-                    );
-                  });
-                },
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () => setState(() {
+                              _selectedDate =
+                                  _selectedDate.subtract(const Duration(days: 1));
+                            }),
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  IconButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () => setState(() {
+                              _selectedDate = _selectedDate.add(const Duration(days: 1));
+                            }),
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                  const SizedBox(width: 4),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _loadData,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Refresh',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          
-          // Scrollable content area
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Month Calendar Grid - 🔧 Full calendar view
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: AppColors.cardBackground,
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                      boxShadow: AppShadows.card,
+
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${_weekdayShort(day1.weekday)} ${day1.day}',
+                        style: AppTextStyles.heading3,
+                      ),
                     ),
-                    child: Column(
-                      children: [
-                        // Week day headers
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day) {
-                            return SizedBox(
-                              width: 40,
-                              child: Center(
-                                child: Text(
-                                  day,
-                                  style: TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        
-                        // Calendar grid
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 7,
-                            childAspectRatio: 1,
-                            crossAxisSpacing: 4,
-                            mainAxisSpacing: 4,
-                          ),
-                          itemCount: _getMonthDays().length,
-                          itemBuilder: (context, index) {
-                            final dayDate = _getMonthDays()[index];
-                            
-                            if (dayDate == null) {
-                              return const SizedBox.shrink();
-                            }
-                            
-                            final today = DateTime.now();
-                            final isSelected = dayDate.day == _selectedDate.day &&
-                                dayDate.month == _selectedDate.month &&
-                                dayDate.year == _selectedDate.year;
-                            final isToday = dayDate.day == today.day &&
-                                dayDate.month == today.month &&
-                                dayDate.year == today.year;
-                            final hasTasks = _hasTasksOnDate(dayDate);
-                            
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedDate = dayDate;
-                                });
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: isSelected ? AppColors.primary : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                                  border: isToday && !isSelected
-                                      ? Border.all(color: AppColors.primary, width: 2)
-                                      : null,
-                                ),
-                                child: Stack(
-                                  children: [
-                                    Center(
-                                      child: Text(
-                                        '${dayDate.day}',
-                                        style: TextStyle(
-                                          color: isSelected
-                                              ? Colors.white
-                                              : AppColors.textPrimary,
-                                          fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ),
-                                    if (hasTasks && !isSelected)
-                                      Positioned(
-                                        bottom: 4,
-                                        left: 0,
-                                        right: 0,
-                                        child: Center(
-                                          child: Container(
-                                            width: 4,
-                                            height: 4,
-                                            decoration: BoxDecoration(
-                                              color: AppColors.success,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '${_weekdayShort(day2.weekday)} ${day2.day}',
+                        style: AppTextStyles.heading3,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-          
-                  // Selected Day Info
-                  Text(
-                    '$selectedDayName, ${_selectedDate.day} ${_getMonthName(_selectedDate.month)}',
-                    style: AppTextStyles.heading2,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-          
-                  // Tasks and Schedule - 🔧 Fixed to filter by selected date
-                  _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : scheduleForDay.isEmpty && tasksForDay.isEmpty
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(AppSpacing.xl),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.event_available,
-                                      size: 64,
-                                      color: AppColors.textSecondary.withOpacity(0.5),
-                                    ),
-                                    const SizedBox(height: AppSpacing.md),
-                                    Text(
-                                      'No tasks for this day',
-                                      style: AppTextStyles.body.copyWith(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(height: AppSpacing.sm),
-                                    Text(
-                                      'Tap + to add a new task',
-                                      style: AppTextStyles.caption.copyWith(
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (scheduleForDay.isNotEmpty) ...[
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 4,
-                                        height: 20,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primary,
-                                          borderRadius: BorderRadius.circular(2),
-                                        ),
-                                      ),
-                                      const SizedBox(width: AppSpacing.sm),
-                                      const Text(
-                                        'Schedule',
-                                        style: AppTextStyles.heading3,
-                                      ),
-                                      const SizedBox(width: AppSpacing.sm),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primary.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          '${scheduleForDay.length}',
-                                          style: TextStyle(
-                                            color: AppColors.primary,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: AppSpacing.sm),
-                                  ...scheduleForDay.map((item) => Padding(
-                                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                                    child: ScheduleCard(scheduleItem: item),
-                                  )),
-                                  const SizedBox(height: AppSpacing.lg),
-                                ],
-                                if (tasksForDay.isNotEmpty) ...[
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 4,
-                                        height: 20,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.success,
-                                          borderRadius: BorderRadius.circular(2),
-                                        ),
-                                      ),
-                                      const SizedBox(width: AppSpacing.sm),
-                                      const Text(
-                                        'Tasks',
-                                        style: AppTextStyles.heading3,
-                                      ),
-                                      const SizedBox(width: AppSpacing.sm),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.success.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          '${tasksForDay.length}',
-                                          style: TextStyle(
-                                            color: AppColors.success,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: AppSpacing.sm),
-                                  ...tasksForDay.asMap().entries.map((entry) {
-                                    final index = entry.key;
-                                    final task = entry.value;
-                                    return Padding(
-                                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                                      child: TaskCard(
-                                        task: task,
-                                        onCheckboxChanged: (value) async {
-                                          final updatedTask = task.copyWith(isCompleted: value ?? false);
-                                          setState(() {
-                                            final allTasksIndex = _allTasks.indexWhere((t) => t.id == task.id);
-                                            if (allTasksIndex != -1) {
-                                              _allTasks[allTasksIndex] = updatedTask;
-                                            }
-                                          });
-                                          
-                                          final customTasks = await _storage.getCustomTasks();
-                                          final taskIndex = customTasks.indexWhere((t) => t['id'] == task.id);
-                                          if (taskIndex != -1) {
-                                            customTasks[taskIndex]['isCompleted'] = updatedTask.isCompleted;
-                                            await _storage.saveCustomTasks(customTasks);
-                                          }
-                                        },
-                                      ),
-                                    );
-                                  }),
-                                ],
-                              ],
-                            ),
-                ],
+                  ],
+                ),
               ),
-            ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: AppShadows.card,
+                ),
+                child: Text(
+                  '$totalCount tasks',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: DayTimeline(
+                          selectedDate: day1,
+                          events: eventsDay1,
+                          startHour: viewDay1.startHour,
+                          endHour: viewDay1.endHour,
+                          pxPerMinute: 0.75,
+                          hideEmptyTime: true,
+                          onEventTap: _onEventTap,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DayTimeline(
+                          selectedDate: day2,
+                          events: eventsDay2,
+                          startHour: viewDay2.startHour,
+                          endHour: viewDay2.endHour,
+                          pxPerMinute: 0.75,
+                          hideEmptyTime: true,
+                          onEventTap: _onEventTap,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _onEventTap(DayTimelineEvent event) async {
+    final task = _findTaskById(event.taskId);
+    if (task == null) return;
+    final navigator = Navigator.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return TaskDetailSheet(
+          task: task,
+          sessionStart: event.start,
+          sessionEnd: event.end,
+          isCompleted: event.isCompleted,
+          onMarkCompleted: () async {
+            await _storage.setTaskSessionCompleted(
+              event.taskId,
+              sessionIndex: event.sessionIndex,
+              isCompleted: true,
+            );
+            if (!mounted) return;
+            navigator.pop(); // close sheet
+            await _loadData();
+          },
+        );
+      },
     );
   }
 
@@ -483,4 +280,31 @@ class _CalendarScreenState extends State<CalendarScreen> {
     ];
     return months[month - 1];
   }
+
+  String _weekdayShort(int weekday) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[(weekday - 1).clamp(0, 6)];
+  }
+
+  /// Returns (startHour, endHour) focusing on hours that contain events.
+  /// Adds 1-hour padding on each side; clamps to 0..24.
+  _HourViewport _computeHourViewport(List<DayTimelineEvent> events) {
+    if (events.isEmpty) return const _HourViewport(startHour: 6, endHour: 22);
+    int minM = 24 * 60;
+    int maxM = 0;
+    for (final e in events) {
+      if (e.startMinutes < minM) minM = e.startMinutes;
+      if (e.endMinutes > maxM) maxM = e.endMinutes;
+    }
+    final startHour = ((minM ~/ 60) - 1).clamp(0, 23);
+    final endHour = (((maxM + 59) ~/ 60) + 1).clamp(startHour + 1, 24);
+    return _HourViewport(startHour: startHour, endHour: endHour);
+  }
+}
+
+class _HourViewport {
+  final int startHour;
+  final int endHour;
+
+  const _HourViewport({required this.startHour, required this.endHour});
 }
