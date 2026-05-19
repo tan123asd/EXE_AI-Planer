@@ -391,6 +391,112 @@ class StorageService {
     return jsonDecode(settingsJson);
   }
   
+  // ==================== PRODUCTIVITY HOURS ====================
+
+  static const String _productivityHoursKey = 'productivity_hours';
+
+  Future<void> saveProductivityHours(
+      List<Map<String, dynamic>> windows) async {
+    await _prefs?.setString(_productivityHoursKey, jsonEncode(windows));
+  }
+
+  List<Map<String, dynamic>> getProductivityHours() {
+    final raw = _prefs?.getString(_productivityHoursKey);
+    if (raw == null || raw.isEmpty) {
+      // Sensible defaults: 8–11 AM and 7–10 PM
+      return [
+        {'startHour': 8, 'endHour': 11},
+        {'startHour': 19, 'endHour': 22},
+      ];
+    }
+    final decoded = jsonDecode(raw) as List<dynamic>;
+    return decoded.cast<Map<String, dynamic>>();
+  }
+
+  // Returns all occupied time ranges in [from, to] from all sources.
+  // Each entry: {startTime, endTime, type: 'fixed'|'deadline'|'activity'}
+  List<Map<String, dynamic>> getOccupiedTimeRanges(
+      DateTime from, DateTime to) {
+    final results = <Map<String, dynamic>>[];
+    final tasks = getCustomTasks();
+
+    for (final task in tasks) {
+      final taskType = task['taskType'] as String? ?? '';
+
+      if (taskType == 'Schedules') {
+        // Recurring fixed schedule — expand occurrences within [from, to]
+        final weekdays = task['weekdays'];
+        final startStr = task['startTime'] as String?;
+        final endStr = task['endTime'] as String?;
+        if (weekdays == null || startStr == null || endStr == null) continue;
+
+        final scheduleWeekdays = (weekdays as List).cast<int>();
+        final startParts = startStr.split(':');
+        final endParts = endStr.split(':');
+        if (startParts.length < 2 || endParts.length < 2) continue;
+
+        final startH = int.tryParse(startParts[0]) ?? 0;
+        final startM = int.tryParse(startParts[1]) ?? 0;
+        final endH = int.tryParse(endParts[0]) ?? 0;
+        final endM = int.tryParse(endParts[1]) ?? 0;
+
+        DateTime day = DateTime(from.year, from.month, from.day);
+        while (!day.isAfter(to)) {
+          if (scheduleWeekdays.contains(day.weekday)) {
+            final s = DateTime(day.year, day.month, day.day, startH, startM);
+            final e = DateTime(day.year, day.month, day.day, endH, endM);
+            if (e.isAfter(s) && s.isBefore(to) && e.isAfter(from)) {
+              results.add({
+                'startTime': s.toIso8601String(),
+                'endTime': e.toIso8601String(),
+                'type': 'fixed',
+              });
+            }
+          }
+          day = day.add(const Duration(days: 1));
+        }
+      } else if (taskType == 'Task') {
+        // Scheduled task sessions
+        final sessions = task['sessions'];
+        if (sessions is List) {
+          for (final s in sessions) {
+            if (s is! Map) continue;
+            final sStart = DateTime.tryParse(s['startTime'] as String? ?? '');
+            final sEnd = DateTime.tryParse(s['endTime'] as String? ?? '');
+            if (sStart == null || sEnd == null) continue;
+            if (sStart.isBefore(to) && sEnd.isAfter(from)) {
+              results.add({
+                'startTime': sStart.toIso8601String(),
+                'endTime': sEnd.toIso8601String(),
+                'type': 'deadline',
+              });
+            }
+          }
+        }
+      } else if (taskType == 'Activity') {
+        // Scheduled activity sessions
+        final sessions = task['sessions'];
+        if (sessions is List) {
+          for (final s in sessions) {
+            if (s is! Map) continue;
+            final sStart = DateTime.tryParse(s['startTime'] as String? ?? '');
+            final sEnd = DateTime.tryParse(s['endTime'] as String? ?? '');
+            if (sStart == null || sEnd == null) continue;
+            if (sStart.isBefore(to) && sEnd.isAfter(from)) {
+              results.add({
+                'startTime': sStart.toIso8601String(),
+                'endTime': sEnd.toIso8601String(),
+                'type': 'activity',
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return results;
+  }
+
   // ==================== SCHEDULE CONFLICT DETECTION ====================
   
   // Check if a time slot conflicts with existing schedule

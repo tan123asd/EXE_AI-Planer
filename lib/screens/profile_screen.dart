@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
+import '../models/scheduler_models.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -18,6 +19,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _bioController;
   
   bool _isEditing = false;
+  List<ProductivityWindow> _productivityWindows = [];
 
   @override
   void initState() {
@@ -26,6 +28,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _emailController = TextEditingController(text: _storage.getUserEmail());
     _phoneController = TextEditingController(text: _storage.getUserPhone());
     _bioController = TextEditingController(text: _storage.getUserBio());
+    _productivityWindows = _storage
+        .getProductivityHours()
+        .map((m) => ProductivityWindow.fromMap(m))
+        .toList();
   }
 
   @override
@@ -149,7 +155,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             
             const SizedBox(height: AppSpacing.lg),
-            
+
+            // Productivity Hours
+            _buildProductivityHoursCard(),
+
+            const SizedBox(height: AppSpacing.lg),
+
             // Logout Button
             SizedBox(
               width: double.infinity,
@@ -295,6 +306,142 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: AppSpacing.xl),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _addProductivityWindow() async {
+    final start = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 8, minute: 0),
+      helpText: 'Select start of focus window',
+    );
+    if (start == null || !mounted) return;
+
+    final end = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: start.hour + 2, minute: 0),
+      helpText: 'Select end of focus window',
+    );
+    if (end == null || !mounted) return;
+
+    final startMin = start.hour * 60 + start.minute;
+    final endMin = end.hour * 60 + end.minute;
+    if (endMin <= startMin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('End time must be after start time'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return;
+    }
+
+    final updated = List<ProductivityWindow>.from(_productivityWindows)
+      ..add(ProductivityWindow(startHour: start.hour, endHour: end.hour));
+    await _storage
+        .saveProductivityHours(updated.map((w) => w.toMap()).toList());
+    setState(() => _productivityWindows = updated);
+  }
+
+  Future<void> _removeProductivityWindow(int index) async {
+    final updated = List<ProductivityWindow>.from(_productivityWindows)
+      ..removeAt(index);
+    await _storage
+        .saveProductivityHours(updated.map((w) => w.toMap()).toList());
+    setState(() => _productivityWindows = updated);
+  }
+
+  String _formatWindow(ProductivityWindow w) {
+    String fmt(int h) =>
+        '${h.toString().padLeft(2, '0')}:00';
+    return '${fmt(w.startHour)} – ${fmt(w.endHour)}';
+  }
+
+  Widget _buildProductivityHoursCard() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.bolt, color: AppColors.primary, size: 20),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text('Productivity Hours', style: AppTextStyles.heading3),
+                ],
+              ),
+              TextButton.icon(
+                onPressed: _addProductivityWindow,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm, vertical: 0),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'High-focus tasks are scheduled within these hours.',
+            style: AppTextStyles.caption
+                .copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          if (_productivityWindows.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+              child: Text(
+                'No windows configured. Tap Add to set your peak focus hours.',
+                style: AppTextStyles.bodySecondary
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+            )
+          else
+            ...List.generate(_productivityWindows.length, (i) {
+              final w = _productivityWindows[i];
+              return Container(
+                margin: const EdgeInsets.only(bottom: AppSpacing.xs),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.schedule,
+                        size: 16, color: AppColors.primary),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        _formatWindow(w),
+                        style: AppTextStyles.body
+                            .copyWith(color: AppColors.primary),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close,
+                          size: 18, color: AppColors.textSecondary),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _removeProductivityWindow(i),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
       ),
     );
   }
