@@ -4,6 +4,7 @@ import '../utils/constants.dart';
 class CalendarEventBlock extends StatelessWidget {
   final Color color;
   final String title;
+  final String? subtitle;
   final String timeRange;
   final bool isCompleted;
   final VoidCallback? onTap;
@@ -12,6 +13,7 @@ class CalendarEventBlock extends StatelessWidget {
     super.key,
     required this.color,
     required this.title,
+    this.subtitle,
     required this.timeRange,
     required this.isCompleted,
     this.onTap,
@@ -39,7 +41,17 @@ class CalendarEventBlock extends StatelessWidget {
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isCompact = constraints.maxHeight <= 44;
+              final h = constraints.maxHeight;
+              // Tiered display based on available height:
+              // ≤44px  → "title · subtitle" on 1 line (compact, no time)
+              // 44-68px → title + subtitle on 2 separate lines (no time)
+              // >68px  → title + subtitle + time range
+              final showTime = h > 68;
+              final showSubtitle = h > 44 && subtitle != null;
+              // For tiny blocks, inline the subtitle into the title
+              final effectiveTitle = (!showSubtitle && subtitle != null)
+                  ? '$title · $subtitle'
+                  : title;
               return Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -53,8 +65,8 @@ class CalendarEventBlock extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,
-                        maxLines: isCompact ? 1 : 2,
+                        effectiveTitle,
+                        maxLines: showTime ? 2 : 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 13,
@@ -63,7 +75,23 @@ class CalendarEventBlock extends StatelessWidget {
                               isCompleted ? TextDecoration.lineThrough : null,
                         ),
                       ),
-                      if (!isCompact) ...[
+                      if (showSubtitle) ...[
+                        const SizedBox(height: 1),
+                        Text(
+                          subtitle!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withOpacity(0.80),
+                            decoration: isCompleted
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                      ],
+                      if (showTime) ...[
                         const SizedBox(height: 2),
                         Text(
                           timeRange,

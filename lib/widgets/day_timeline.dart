@@ -7,6 +7,7 @@ class DayTimelineEvent {
   final String taskId;
   final int sessionIndex;
   final String title;
+  final String? subtitle;
   final String subject;
   final DateTime start;
   final DateTime end;
@@ -17,6 +18,7 @@ class DayTimelineEvent {
     required this.taskId,
     required this.sessionIndex,
     required this.title,
+    this.subtitle,
     required this.subject,
     required this.start,
     required this.end,
@@ -155,6 +157,8 @@ class _DayTimelineState extends State<DayTimeline> {
       height: mapper.totalHeight,
       child: Stack(
         children: (eventTicks ?? _buildHourTicks(mapper, hours + 1)).map((t) {
+          final hh = (t.minuteOfDay ~/ 60).toString().padLeft(2, '0');
+          final mm = (t.minuteOfDay % 60).toString().padLeft(2, '0');
           return Positioned(
             top: t.top,
             left: 0,
@@ -164,7 +168,7 @@ class _DayTimelineState extends State<DayTimeline> {
               child: Transform.translate(
                 offset: Offset(0, t.isFirst ? 4 : -6),
                 child: Text(
-                  '${t.hour.toString().padLeft(2, '0')}:00',
+                  '$hh:$mm',
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
@@ -197,7 +201,7 @@ class _DayTimelineState extends State<DayTimeline> {
     for (final m in minutes) {
       final top = mapper.yForMinute(m);
       if (lastTop != null && (top - lastTop) < 18) continue;
-      ticks.add(_HourTick(hour: m ~/ 60, top: top, isFirst: ticks.isEmpty));
+      ticks.add(_HourTick(minuteOfDay: m, top: top, isFirst: ticks.isEmpty));
       lastTop = top;
     }
     return ticks;
@@ -211,7 +215,7 @@ class _DayTimelineState extends State<DayTimeline> {
       final minute = hour * 60;
       final top = mapper.yForMinute(minute);
       if (lastTop != null && (top - lastTop) < 18) continue;
-      ticks.add(_HourTick(hour: hour, top: top, isFirst: i == 0));
+      ticks.add(_HourTick(minuteOfDay: minute, top: top, isFirst: i == 0));
       lastTop = top;
     }
     return ticks;
@@ -309,6 +313,7 @@ class _DayTimelineState extends State<DayTimeline> {
       child: CalendarEventBlock(
         color: AppColors.subjectAccentColor(placed.event.subject),
         title: placed.event.title,
+        subtitle: placed.event.subtitle,
         timeRange:
             '${_hhmm(placed.event.start)}–${_hhmm(placed.event.end)}',
         isCompleted: placed.event.isCompleted,
@@ -452,11 +457,11 @@ class _PlacedEvent {
 }
 
 class _HourTick {
-  final int hour;
+  final int minuteOfDay;
   final double top;
   final bool isFirst;
 
-  _HourTick({required this.hour, required this.top, required this.isFirst});
+  _HourTick({required this.minuteOfDay, required this.top, required this.isFirst});
 }
 
 class _MinuteRange {

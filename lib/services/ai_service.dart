@@ -91,6 +91,7 @@ class AiService {
     required String category,
     required DateTime deadline,
     required String priority,
+    String language = 'English',
   }) async {
     if (_apiKey.isEmpty) {
       throw AiServiceException(
@@ -102,7 +103,8 @@ class AiService {
         'Description: ${notes.isNotEmpty ? notes : taskName}\n'
         'Priority: $priority\n'
         'Current time: ${_formatDatetime(DateTime.now())}\n'
-        'Deadline: ${_formatDatetime(deadline)}';
+        'Deadline: ${_formatDatetime(deadline)}\n'
+        'IMPORTANT: Write ALL subtask names in $language. Do not use any other language.';
 
     final body = jsonEncode({
       'model': 'gpt-4o-mini',

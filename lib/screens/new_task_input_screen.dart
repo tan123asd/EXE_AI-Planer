@@ -212,13 +212,18 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         String? apiWarning;
 
         try {
+          final taskText = _taskNameController.text.trim();
+          final notesText = _notesController.text.trim();
+          final isVi = taskText.runes.any((r) => r > 127) ||
+              notesText.runes.any((r) => r > 127);
           plan = await _aiService.generateTaskPlan(
-            taskName: _taskNameController.text.trim(),
-            notes: _notesController.text.trim(),
+            taskName: taskText,
+            notes: notesText,
             difficulty: _difficulty,
             category: _category,
             deadline: effectiveDeadline,
             priority: priorityStr,
+            language: isVi ? 'Vietnamese' : 'English',
           );
         } on AiServiceException catch (e) {
           apiWarning = e.message;

@@ -58,7 +58,7 @@ Subject color map: Study → orange, Personal → purple (`#7B61FF`), Health →
 
 ## Flutter SDK & Dependencies
 
-- Flutter SDK constraint: `>=2.19.0 <3.0.0`
+- Flutter SDK constraint: `>=3.0.0 <4.0.0` (Dart 3 — required for `sealed` classes and exhaustive pattern matching)
 - Linting: `package:flutter_lints/flutter.yaml` (no custom overrides)
 - Key packages: `provider`, `shared_preferences`, `intl`, `http`
 
@@ -212,3 +212,166 @@ If `OPENAI_API_KEY` is empty, `AiService.generateTaskPlan()` throws `AiServiceEx
 ### Removed from `new_task_input_screen.dart`
 
 `_findNextAvailableSlotWithTracking`, `_sortHoursByPreference`, and `_getPreferredHour` were deleted — their logic is now fully inside `SchedulerService`.
+
+---
+
+## AI Chat Planner (added 2026-05-19, refactored to Function Calling 2026-05-20, extended 2026-05-21)
+
+### Overview
+
+A natural-language chat interface that replaces the Tasks tab in the bottom nav. Users can create plans, modify schedules, mark tasks complete, delete tasks, and adjust workload by chatting.
+
+**Navigation:**
+```
+Old: Home | Tasks | [+FAB] | Calendar | Profile
+New: Home | Chat  | [+FAB] | Calendar | Profile
+```
+`TasksScreen` is accessible from the Home screen task list via `Navigator.push`.
+
+### Files
+
+| File | Role |
+|---|---|
+| `lib/models/chat_models.dart` | `ChatMessage`, `ConversationContext` + sealed class `AiToolCall` hierarchy |
+| `lib/services/chat_ai_service.dart` | GPT-4o-mini with **Function Calling** — returns `AiToolCall`, not JSON |
+| `lib/services/chat_planner_service.dart` | Orchestration: executes actions against `AiService` + `SchedulerService` + `StorageService` |
+| `lib/screens/chat_planner_screen.dart` | Chat UI + `_dispatchToolCall()` router |
+| `lib/widgets/chat_message_bubble.dart` | User (right, primary color) and AI (left, card) message bubbles |
+| `lib/widgets/chat_plan_preview_card.dart` | Inline plan card with editable time slots + Approve / Reject |
+
+### Architecture: OpenAI Function Calling
+
+**`ChatAiService.chat()` returns `AiToolCall`** (sealed class), not `ChatResponse`.  
+The AI chooses the correct tool and fills parameters — Flutter executes deterministically.
+
+```
+User message
+    │
+    ├── matches /hướng dẫn|help|usage/i → local help text, no API call
+    │
+    ▼
+ChatAiService.chat()          POST /v1/chat/completions (gpt-4o-mini)
+    │  tools: 12 functions (see table below)
+    │  tool_choice: "auto"
+    │  returns: AiToolCall (sealed)
+    ▼
+_dispatchToolCall() in ChatPlannerScreen
+    ├── TextOnlyResponse        → show AI reply text
+    ├── CollectPlanInfoCall     → _applyCollectPlanInfo() → if ready → generatePlan()
+    │                             else → _buildNextQuestion() (deterministic, no extra API call)
+    ├── AddTaskDirectCall       → ChatPlannerService.addTaskDirect() (conflict check first)
+    ├── ShiftTaskCall           → ChatPlannerService.shiftTaskByDays()
+    ├── CompleteTaskCall        → ChatPlannerService.completeTask()
+    ├── DeleteTaskCall          → confirm dialog → deleteTask() / deleteAllTasks()
+    ├── DeleteSubtaskCall       → findSubtaskForDelete() → confirm dialog → confirmDeleteSubtask()
+    ├── AdjustWorkloadCall      → ChatPlannerService.adjustWorkload()
+    ├── QueryScheduleCall       → no-op (schedule data is in system prompt; AI replies as text)
+    ├── AddActivityCall         → ChatPlannerService.addActivity() (conflict check if exact time)
+    ├── ShiftActivityCall       → ChatPlannerService.shiftActivity()
+    └── DeleteActivityCall      → confirm dialog → ChatPlannerService.deleteActivity()
+```
+
+### AiToolCall Sealed Class Hierarchy
+
+```dart
+sealed class AiToolCall {}
+  // Task (deadline-based)
+  CollectPlanInfoCall   // goal, deadline (ISO), dailyHours, taskDetails, projectType
+  AddTaskDirectCall     // taskName, durationMinutes, specificDate, specificStartHour
+  ShiftTaskCall         // taskName, daysOffset (int, negative=back)
+  CompleteTaskCall      // taskName
+  DeleteTaskCall        // taskName ("__ALL__" = all tasks)
+  DeleteSubtaskCall     // subtaskName (fuzzy + normalized matched)
+  AdjustWorkloadCall    // taskName, direction ("lighter"|"heavier")
+  RePlanTaskCall        // taskName, userIntent ("need_more_time"|"task_is_easier")
+  QueryScheduleCall     // timeRange ("today"|"this_week"|"all")
+  // Activity (habits/hobbies)
+  AddActivityCall       // name, durationMinutes, preferredWeekdays?, specificDate?, specificStartHour?, category
+  ShiftActivityCall     // activityName, daysOffset
+  DeleteActivityCall    // activityName
+  // Fallback
+  TextOnlyResponse      // content (greetings, clarifications, schedule answers)
+```
+
+### Tools Defined in `ChatAiService._tools`
+
+12 function definitions passed to OpenAI. AI picks the right one automatically.  
+`collect_plan_info` has all fields nullable (multi-turn: AI calls it incrementally).
+
+### Keyword Routing (enforced via system prompt, NOT Flutter code)
+
+| User says | AI calls |
+|-----------|----------|
+| "thêm task / thêm công việc / thêm deadline" + **full info** (name+date+time+duration) | `add_task_direct` |
+| "thêm task / thêm công việc / thêm deadline" + **incomplete info** | `collect_plan_info` |
+| "thêm hoạt động / thêm 1 hoạt động" | `add_activity` |
+| "dời hoạt động" | `shift_activity` |
+| "xóa hoạt động" | `delete_activity` |
+| "hướng dẫn / help / usage" | **local handler** (no API call) |
+
+### Multi-turn Plan Creation Flow
+
+Context state machine: `idle → collectingContext → awaitingApproval → idle`
+
+Three required fields: `goalDescription`, `parsedDeadline`, `dailyAvailableHours`.  
+When `CollectPlanInfoCall` arrives but context is incomplete, `_buildNextQuestion()` generates the next question **without a second API call** (detects Vietnamese via `runes.any((r) => r > 127)`).  
+When all three fields are present, `_handleGeneratePlan()` is called automatically.
+
+### Activity Management (added 2026-05-21)
+
+`ChatPlannerService` handles three activity operations:
+
+- **`addActivity(AddActivityCall)`** — if `specificDate` + `specificStartHour` present: calls `StorageService.hasScheduleConflict()` first; on conflict returns a message + nearest free slot from `findNextAvailableSlot()`. Otherwise calls `SchedulerService.scheduleActivity()` and saves top 3 candidates as sessions.
+- **`shiftActivity(name, daysOffset)`** — fuzzy-matches on `taskType == 'Activity'` only, shifts all sessions.
+- **`deleteActivity(name)`** — fuzzy-matches on `taskType == 'Activity'` only, hard-deletes.
+
+`_fuzzyFindActivityIndex()` is a separate helper that scopes the search to activities only (exact → contains → reverse-contains).
+
+### Direct Task Add with Conflict Check (added 2026-05-21)
+
+`ChatPlannerService.addTaskDirect(taskName, durationMinutes, specificDate, startHour)`:
+1. Calls `StorageService.hasScheduleConflict(start, end)`
+2. If conflict → returns error message + nearest alternative from `findNextAvailableSlot()`
+3. If free → saves a single-session `Task` directly to `custom_tasks` (no AI plan generation, no scheduler)
+
+### Delete Subtask Fix (2026-05-21)
+
+`deleteSubtask` was split into two steps to allow UI confirmation with the **real** subtask name:
+
+1. `findSubtaskForDelete(subtaskName) → SubtaskMatch` — finds without deleting; returns `{found, sessionName, parentTaskName, taskIdx, sessionIdx}`
+2. `confirmDeleteSubtask(taskIdx, sessionIdx)` — removes the session after user confirms
+
+`_findSessionIndex` now uses `_normalize()` (strips Vietnamese diacritics + lowercases) before matching, enabling typo-tolerant search like "lam slid thuyédt trình" → "làm slide thuyết trình". Matching priority: exact normalized → contains → reverse-contains → word overlap ≥ 50%.
+
+`_normalize(String s)` is a private helper in `ChatPlannerService`.
+
+### Architecture Rules
+
+- **AI is responsible for:** tool selection, parameter extraction, natural-language replies, date conversion to ISO 8601.
+- **Flutter is responsible for:** executing actions, confirm dialogs, plan approval UI, persistence.
+- **Never add hardcoded keyword matching in Flutter** — keyword routing is enforced via system prompt rules only. If AI doesn't route correctly, fix the system prompt or tool description.
+- `ChatPlannerService.findTask(name)` — public fuzzy-match for Tasks (exact → partial → reverse-contains → word overlap).
+- `ChatPlannerService._fuzzyFindActivityIndex(name, tasks)` — same logic scoped to `taskType == 'Activity'`.
+
+### ConversationContext
+
+Stored in SharedPreferences key `'chat_context'`. Tracks:
+- `goalDescription`, `parsedDeadline`, `dailyAvailableHours`, `taskDetails`, `projectType`, `additionalNotes`
+- `phase`: idle → collectingContext → awaitingApproval → executing
+- `acceptedPlanIds`, `dependencyGraph`
+
+Reset via `context.reset()` after plan approval or rejection.
+
+### Storage Keys
+
+| Key | Value |
+|---|---|
+| `'chat_history'` | JSON list of `ChatMessage` (last 100 kept) |
+| `'chat_context'` | JSON of current `ConversationContext` |
+
+### ChatAiService Config
+
+- Model: `gpt-4o-mini`, temperature 0.4
+- API key: `--dart-define=OPENAI_API_KEY=sk-...`
+- History window: last 20 messages
+- No `response_format: json_object` — uses `tool_choice: auto` instead

@@ -44,13 +44,60 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return null;
   }
 
+  List<DayTimelineEvent> _getFixedScheduleEventsForDate(DateTime date) {
+    final events = <DayTimelineEvent>[];
+    for (final task in _allCustomTasks) {
+      if (task['taskType'] != 'Schedules') continue;
+
+      final weekdays = task['weekdays'];
+      if (weekdays is! List) continue;
+      if (!weekdays.contains(date.weekday)) continue;
+
+      final startTimeStr = task['startTime'] as String?;
+      final endTimeStr = task['endTime'] as String?;
+      if (startTimeStr == null || endTimeStr == null) continue;
+
+      final startParts = startTimeStr.split(':');
+      final endParts = endTimeStr.split(':');
+      if (startParts.length != 2 || endParts.length != 2) continue;
+
+      final startHour = int.tryParse(startParts[0]) ?? 0;
+      final startMin = int.tryParse(startParts[1]) ?? 0;
+      final endHour = int.tryParse(endParts[0]) ?? 0;
+      final endMin = int.tryParse(endParts[1]) ?? 0;
+
+      final start = DateTime(date.year, date.month, date.day, startHour, startMin);
+      final end = DateTime(date.year, date.month, date.day, endHour, endMin);
+      if (!end.isAfter(start)) continue;
+
+      final endDateStr = task['endDate'] as String?;
+      if (endDateStr != null) {
+        final endDate = DateTime.tryParse(endDateStr);
+        if (endDate != null && date.isAfter(endDate)) continue;
+      }
+
+      events.add(DayTimelineEvent(
+        id: '${task['id'] ?? 'fixed'}_${date.millisecondsSinceEpoch}',
+        taskId: (task['id'] ?? '').toString(),
+        sessionIndex: -1,
+        title: (task['name'] ?? 'Schedule').toString(),
+        subtitle: null,
+        subject: 'Schedules',
+        start: start,
+        end: end,
+        isCompleted: false,
+      ));
+    }
+    return events;
+  }
+
   List<DayTimelineEvent> _getSessionEventsForDate(DateTime date) {
     final events = <DayTimelineEvent>[];
     for (final task in _allCustomTasks) {
       final sessions = _extractSessions(task['sessions']);
       if (sessions == null || sessions.isEmpty) continue;
       final taskId = (task['id'] ?? '').toString();
-      final title = (task['name'] ?? 'Untitled').toString();
+      final taskName = (task['name'] ?? 'Untitled').toString();
       final subject = (task['subject'] ?? task['taskType'] ?? 'Task').toString();
 
       for (int i = 0; i < sessions.length; i++) {
@@ -61,6 +108,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
         if (start == null || end == null) continue;
         final sessionCompleted = s['isCompleted'] == true;
 
+        // Use subtask name as title; fall back to parent task name if absent.
+        final subtaskName = (s['taskName'] as String?)?.trim() ?? '';
+        final title = subtaskName.isNotEmpty ? subtaskName : taskName;
+        // Show parent task as subtitle only when it differs from the title.
+        final subtitle = (subtaskName.isNotEmpty && subtaskName != taskName)
+            ? taskName
+            : null;
+
         if (start.year == date.year &&
             start.month == date.month &&
             start.day == date.day) {
@@ -70,6 +125,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               taskId: taskId,
               sessionIndex: i,
               title: title,
+              subtitle: subtitle,
               subject: subject,
               start: start,
               end: end,
@@ -93,8 +149,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget build(BuildContext context) {
     final day1 = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
     final day2 = day1.add(const Duration(days: 1));
-    final eventsDay1 = _getSessionEventsForDate(day1);
-    final eventsDay2 = _getSessionEventsForDate(day2);
+    final eventsDay1 = [
+      ..._getSessionEventsForDate(day1),
+      ..._getFixedScheduleEventsForDate(day1),
+    ];
+    final eventsDay2 = [
+      ..._getSessionEventsForDate(day2),
+      ..._getFixedScheduleEventsForDate(day2),
+    ];
     final viewDay1 = _computeHourViewport(eventsDay1);
     final viewDay2 = _computeHourViewport(eventsDay2);
     final totalCount = eventsDay1.length + eventsDay2.length;
@@ -245,6 +307,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _onEventTap(DayTimelineEvent event) async {
+    // Fixed schedule events (sessionIndex -1) are read-only, skip detail sheet
+    if (event.sessionIndex < 0) return;
     final task = _findTaskById(event.taskId);
     if (task == null) return;
     final navigator = Navigator.of(context);

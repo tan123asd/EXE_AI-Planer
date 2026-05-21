@@ -12,6 +12,7 @@ import 'new_task_input_screen.dart';
 import 'tasks_screen.dart';
 import 'calendar_screen.dart';
 import 'profile_screen.dart';
+import 'chat_planner_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -1298,7 +1299,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final screens = [
       _buildHomeContent(),
-      const TasksScreen(),
+      const ChatPlannerScreen(),
       const CalendarScreen(),
       const ProfileScreen(),
     ];
@@ -1396,7 +1397,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         _buildNavItem(Icons.home_rounded, 'Home', 0),
-                        _buildNavItem(Icons.task_alt, 'Tasks', 1),
+                        _buildNavItem(Icons.chat_bubble_outline_rounded, 'Chat', 1),
                         const SizedBox(width: 48), // Space for FAB
                         _buildNavItem(Icons.calendar_month, 'Calendar', 2),
                         _buildNavItem(Icons.person, 'Profile', 3),

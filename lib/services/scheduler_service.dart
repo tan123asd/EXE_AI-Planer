@@ -24,14 +24,20 @@ class SchedulerService {
     final scheduledSlots = <ScheduledSlot>[];
     final failedTasks = <AiSubtask>[];
 
+    // Sequential cursor: subtask N+1 starts after subtask N's last session ends.
+    // This preserves chapter ordering (ch1 → ch2 → ch3).
+    // The old pile-up bug was caused by the urgency bonus, not this constraint.
+    DateTime subtaskSearchFrom = config.searchFrom;
+
     for (final task in sortedTasks) {
       int durationLeft = (task.duration * 60).round();
       final int minBlockMin = (task.minBlock * 60).round();
+      DateTime sessionSearchFrom = subtaskSearchFrom;
 
       int sessionIdx = 0;
       while (durationLeft > 0) {
         final blocks = _findFreeBlocks(
-          config.searchFrom,
+          sessionSearchFrom,
           config.deadline,
           minBlockMin,
           hardOccupied,
@@ -66,9 +72,14 @@ class SchedulerService {
         if (breakMin > 0) {
           hardOccupied.add(_Range(slotEnd, slotEnd.add(Duration(minutes: breakMin))));
         }
+        // Advance within-subtask cursor past this session and its break.
+        sessionSearchFrom = slotEnd.add(Duration(minutes: breakMin));
         durationLeft -= actualAlloc;
         sessionIdx++;
       }
+
+      // Advance the cross-subtask cursor so the next subtask starts after this one.
+      subtaskSearchFrom = sessionSearchFrom;
 
       if (durationLeft > 0) {
         failedTasks.add(task);
@@ -356,13 +367,17 @@ class SchedulerService {
     // Soft-rest penalty
     if (block.isSoftRest) s -= 30;
 
-    // Day overload penalty (> 4h already scheduled)
+    // Day overload penalty — tiered so the scheduler spreads work across days.
     final dayMinutes = _scheduledMinutesOnDay(block.start, hardOccupied);
-    if (dayMinutes > 240) s -= 20;
+    if (dayMinutes > 360) {
+      s -= 150; // >6 h: strongly avoid this day
+    } else if (dayMinutes > 240) {
+      s -= 60;  // >4 h: prefer a fresh day
+    }
 
-    // Urgency bonus when deadline is near
-    final daysLeft = config.deadline.difference(block.start).inDays;
-    if (daysLeft < 2) s += 15;
+    // Prefer earlier slots so work is spread from today, not piled at the deadline.
+    final daysFromNow = block.start.difference(config.searchFrom).inDays;
+    s -= daysFromNow;
 
     return s;
   }

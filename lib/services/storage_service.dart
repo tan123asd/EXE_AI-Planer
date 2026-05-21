@@ -677,10 +677,53 @@ class StorageService {
     return schedule.where((item) {
       final itemStart = DateTime.tryParse(item['startTime'] ?? '');
       if (itemStart == null) return false;
-      
+
       return itemStart.year == day.year &&
              itemStart.month == day.month &&
              itemStart.day == day.day;
     }).toList();
+  }
+
+  // ─── Chat Planner Persistence ────────────────────────────────────────────
+
+  static const String _chatHistoryKey = 'chat_history';
+  static const String _chatContextKey = 'chat_context';
+  static const int _maxChatMessages = 100;
+
+  Future<void> saveChatHistory(List<Map<String, dynamic>> messages) async {
+    final toSave = messages.length > _maxChatMessages
+        ? messages.sublist(messages.length - _maxChatMessages)
+        : messages;
+    await _prefs?.setString(_chatHistoryKey, jsonEncode(toSave));
+  }
+
+  List<Map<String, dynamic>> loadChatHistory() {
+    final raw = _prefs?.getString(_chatHistoryKey);
+    if (raw == null) return [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveConversationContext(Map<String, dynamic> context) async {
+    await _prefs?.setString(_chatContextKey, jsonEncode(context));
+  }
+
+  Map<String, dynamic>? loadConversationContext() {
+    final raw = _prefs?.getString(_chatContextKey);
+    if (raw == null) return null;
+    try {
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> clearChatHistory() async {
+    await _prefs?.remove(_chatHistoryKey);
+    await _prefs?.remove(_chatContextKey);
   }
 }
