@@ -246,7 +246,14 @@ class CollectPlanInfoCall extends AiToolCall {
 class ShiftTaskCall extends AiToolCall {
   final String taskName;
   final int daysOffset;
-  ShiftTaskCall({required this.taskName, required this.daysOffset});
+  final String confidence; // 'high' | 'medium' | 'low'
+  final String? clarificationNeeded;
+  ShiftTaskCall({
+    required this.taskName,
+    required this.daysOffset,
+    this.confidence = 'high',
+    this.clarificationNeeded,
+  });
 }
 
 class CompleteTaskCall extends AiToolCall {
@@ -262,7 +269,14 @@ class DeleteTaskCall extends AiToolCall {
 class AdjustWorkloadCall extends AiToolCall {
   final String taskName;
   final String direction;
-  AdjustWorkloadCall({required this.taskName, required this.direction});
+  final String confidence; // 'high' | 'medium' | 'low'
+  final String? clarificationNeeded;
+  AdjustWorkloadCall({
+    required this.taskName,
+    required this.direction,
+    this.confidence = 'high',
+    this.clarificationNeeded,
+  });
 }
 
 class QueryScheduleCall extends AiToolCall {
@@ -273,7 +287,14 @@ class QueryScheduleCall extends AiToolCall {
 class RePlanTaskCall extends AiToolCall {
   final String taskName;
   final String userIntent; // 'need_more_time' | 'task_is_easier'
-  RePlanTaskCall({required this.taskName, required this.userIntent});
+  final String confidence; // 'high' | 'medium' | 'low'
+  final String? clarificationNeeded;
+  RePlanTaskCall({
+    required this.taskName,
+    required this.userIntent,
+    this.confidence = 'high',
+    this.clarificationNeeded,
+  });
 }
 
 class DeleteSubtaskCall extends AiToolCall {
@@ -314,11 +335,15 @@ class AddTaskDirectCall extends AiToolCall {
   final int durationMinutes;
   final String specificDate;
   final int specificStartHour;
+  final String confidence; // 'high' | 'medium' | 'low'
+  final String? clarificationNeeded;
   AddTaskDirectCall({
     required this.taskName,
     required this.durationMinutes,
     required this.specificDate,
     required this.specificStartHour,
+    this.confidence = 'high',
+    this.clarificationNeeded,
   });
 }
 

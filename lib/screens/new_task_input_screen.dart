@@ -22,6 +22,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   final TextEditingController _taskNameController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
   final TextEditingController _activityDurationController = TextEditingController();
+  final TextEditingController _customSubtaskNameController = TextEditingController();
   
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -44,6 +45,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   int? _selectedSuggestionIndex;
   String _lastGeneratedSignature = '';
   int? _activityDurationMinutes;
+  int? _dailyHoursLimit; // null = no cap
   // Task: multi-select AI slots + custom slots
   final Set<int> _selectedSuggestionIndices = {};
   final Map<int, Set<int>> _selectedSessionsPerOption = {};
@@ -102,6 +104,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     _taskNameController.dispose();
     _notesController.dispose();
     _activityDurationController.dispose();
+    _customSubtaskNameController.dispose();
     super.dispose();
   }
 
@@ -216,9 +219,17 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           final notesText = _notesController.text.trim();
           final isVi = taskText.runes.any((r) => r > 127) ||
               notesText.runes.any((r) => r > 127);
+          final dailyConstraint = _dailyHoursLimit != null
+              ? 'HARD CONSTRAINT: User can only work $_dailyHoursLimit hour${_dailyHoursLimit == 1 ? '' : 's'} per day on this task. '
+                'Each subtask duration MUST be ≤ ${_dailyHoursLimit}h. '
+                'Do NOT generate any subtask longer than ${_dailyHoursLimit}h.'
+              : '';
+          final combinedNotes = [notesText, dailyConstraint]
+              .where((s) => s.isNotEmpty)
+              .join(' ');
           plan = await _aiService.generateTaskPlan(
             taskName: taskText,
-            notes: notesText,
+            notes: combinedNotes.isNotEmpty ? combinedNotes : taskText,
             difficulty: _difficulty,
             category: _category,
             deadline: effectiveDeadline,
@@ -274,6 +285,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           productivityWindows: productivityWindows,
           searchFrom: now,
           deadline: effectiveDeadline,
+          maxMinutesPerDay:
+              _dailyHoursLimit != null ? _dailyHoursLimit! * 60 : null,
         );
 
         final occupiedRanges =
@@ -306,6 +319,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     'startTime': s.startTime.toIso8601String(),
                     'endTime': s.endTime.toIso8601String(),
                     'duration': s.durationMinutes,
+                    'taskName': subtask.name,
                   })
               .toList();
           _aiSuggestedSessionGroups.add(sessions);
@@ -556,6 +570,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     _selectedSuggestionIndices.clear();
     _selectedSessionsPerOption.clear();
     _customSlots.clear();
+    _customSubtaskNameController.clear();
     _customSlotDate = null;
     _customSlotStart = null;
     _customSlotEnd = null;
@@ -594,6 +609,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       endTime,
       _scheduleEndDate?.toIso8601String() ?? '',
       _activityDurationMinutes?.toString() ?? '',
+      _dailyHoursLimit?.toString() ?? '',
     ].join('|');
   }
 
@@ -1321,6 +1337,37 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       });
     }
     return list;
+  }
+
+  List<String> _findCustomSlotOverlaps(DateTime newStart, DateTime newEnd) {
+    final conflicts = <String>[];
+    for (final slot in _getSelectedTimeSlots()) {
+      final sStr = slot['startTime'];
+      final eStr = slot['endTime'];
+      DateTime s, e;
+      try {
+        s = sStr is DateTime ? sStr : DateTime.parse(sStr as String);
+        e = eStr is DateTime ? eStr : DateTime.parse(eStr as String);
+      } catch (_) {
+        continue;
+      }
+      if (!newStart.isBefore(e) || !s.isBefore(newEnd)) continue;
+      final customIdx = slot['_customIndex'] as int?;
+      if (customIdx != null && customIdx < _customSlots.length) {
+        conflicts.add(
+            _customSlots[customIdx]['taskName'] as String? ?? 'Custom slot');
+      } else {
+        final optIdx = slot['_optionIndex'] as int?;
+        if (optIdx != null && optIdx < _aiSuggestedSlots.length) {
+          final firstLine = _aiSuggestedSlots[optIdx].split('\n').first;
+          conflicts
+              .add(firstLine.replaceAll(RegExp(r' • \d+ sessions$'), ''));
+        } else {
+          conflicts.add('Scheduled slot');
+        }
+      }
+    }
+    return conflicts.toSet().toList(); // deduplicate
   }
 
   String _formatTimeOfDay24H(TimeOfDay time, {bool isRangeEnd = false}) {
@@ -2331,6 +2378,72 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     const SizedBox(height: 16),
                   ],
                   
+                  // 3c. Daily hours limit (Task only)
+                  if (_taskType == 'Task') ...[
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionLabel('Daily Time Limit', Icons.schedule_outlined),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Max hours to schedule for this task per day',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary.withOpacity(0.7),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [null, 1, 2, 3, 4, 5].map<Widget>((h) {
+                              final isSelected = _dailyHoursLimit == h;
+                              final label =
+                                  h == null ? 'No limit' : '${h}h / day';
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _dailyHoursLimit = h;
+                                    _invalidateAIPreviewState();
+                                  });
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : AppColors.background,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? AppColors.primary
+                                          : Colors.grey.shade300,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // 4. AI Time Planning (only for Task type)
                   if (_taskType == 'Task') ...[
                     _buildCard(
@@ -2750,6 +2863,26 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   ),
                                 ),
                                 const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.grey.shade300),
+                                  ),
+                                  child: TextField(
+                                    controller: _customSubtaskNameController,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Subtask name',
+                                      hintStyle: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                      isDense: true,
+                                      border: InputBorder.none,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
                                 Row(
                                   children: [
                                     Expanded(
@@ -2879,11 +3012,12 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     const SizedBox(width: 8),
                                     SizedBox(
                                       child: ElevatedButton(
-                                        onPressed: () {
-                                          if (_customSlotDate == null || _customSlotStart == null || _customSlotEnd == null) {
+                                        onPressed: () async {
+                                          final subtaskName = _customSubtaskNameController.text.trim();
+                                          if (subtaskName.isEmpty || _customSlotDate == null || _customSlotStart == null || _customSlotEnd == null) {
                                             ScaffoldMessenger.of(context).showSnackBar(
                                               const SnackBar(
-                                                content: Text('Please set date, start and end time'),
+                                                content: Text('Please set subtask name, date, start and end time'),
                                                 behavior: SnackBarBehavior.floating,
                                               ),
                                             );
@@ -2919,12 +3053,54 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                             em,
                                           );
                                           final duration = end.difference(start).inMinutes;
+
+                                          final conflicts = _findCustomSlotOverlaps(start, end);
+                                          if (conflicts.isNotEmpty && mounted) {
+                                            final proceed = await showDialog<bool>(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(16)),
+                                                title: const Row(
+                                                  children: [
+                                                    Icon(Icons.warning_amber_rounded,
+                                                        color: AppColors.warning),
+                                                    SizedBox(width: 8),
+                                                    Text('Time Conflict'),
+                                                  ],
+                                                ),
+                                                content: Text(
+                                                  'This slot overlaps with:\n'
+                                                  '${conflicts.map((c) => '• $c').join('\n')}\n\n'
+                                                  'Do you want to add it anyway?',
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.of(ctx).pop(false),
+                                                    child: const Text('Cancel'),
+                                                  ),
+                                                  ElevatedButton(
+                                                    onPressed: () => Navigator.of(ctx).pop(true),
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: AppColors.warning,
+                                                      foregroundColor: Colors.white,
+                                                    ),
+                                                    child: const Text('Add Anyway'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (proceed != true || !mounted) return;
+                                          }
+
                                           setState(() {
                                             _customSlots.add({
+                                              'taskName': subtaskName,
                                               'startTime': start.toIso8601String(),
                                               'endTime': end.toIso8601String(),
                                               'duration': duration,
                                             });
+                                            _customSubtaskNameController.clear();
                                             _customSlotDate = null;
                                             _customSlotStart = null;
                                             _customSlotEnd = null;
@@ -2971,6 +3147,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   final optionIndex = m['_optionIndex'] as int?;
                                   final sessionIndexInOption = m['_sessionIndexInOption'] as int?;
                                   final customIndex = m['_customIndex'] as int?;
+                                  final customTaskName = customIndex != null
+                                      ? _customSlots[customIndex]['taskName'] as String?
+                                      : null;
                                   return Container(
                                     margin: const EdgeInsets.only(bottom: 6),
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2982,9 +3161,23 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     child: Row(
                                       children: [
                                         Expanded(
-                                          child: Text(
-                                            '${DateFormat('d/M/yyyy').format(start)}  ${_formatTimeWith24H(start)} – ${_formatTimeWith24H(end, isRangeEnd: true)}',
-                                            style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              if (customTaskName != null && customTaskName.isNotEmpty)
+                                                Text(
+                                                  customTaskName,
+                                                  style: const TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AppColors.textPrimary,
+                                                  ),
+                                                ),
+                                              Text(
+                                                '${DateFormat('d/M/yyyy').format(start)}  ${_formatTimeWith24H(start)} – ${_formatTimeWith24H(end, isRangeEnd: true)}',
+                                                style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                         GestureDetector(

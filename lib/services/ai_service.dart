@@ -60,6 +60,7 @@ Return ONLY a valid JSON object with this exact structure — no explanation, no
 5. Each subtask name must be a specific, actionable phrase (not generic like "Study" or "Work on it")
 6. Subtask total duration should reflect the goal\'s actual complexity relative to the deadline gap
 7. Never include "break" as a subtask — breaks are handled by the scheduling system
+8. If the notes include "HARD CONSTRAINT: User can only work X hours per day", then EVERY subtask duration MUST be ≤ X hours. This is a strict limit — never generate a subtask with duration > the stated daily limit.
 
 ## Examples
 

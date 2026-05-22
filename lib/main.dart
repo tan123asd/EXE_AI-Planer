@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'screens/splash_screen.dart';
 import 'utils/constants.dart';
 import 'services/storage_service.dart';
+import 'services/user_profile_service.dart';
 import 'providers/theme_provider.dart';
 
 void main() async {
@@ -11,6 +12,7 @@ void main() async {
   
   // Initialize storage service
   await StorageService().init();
+  await UserProfileService().init();
   
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(

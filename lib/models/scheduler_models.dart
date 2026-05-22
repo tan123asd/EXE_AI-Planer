@@ -85,11 +85,15 @@ class SchedulerConfig {
   final List<ProductivityWindow> productivityWindows;
   final DateTime searchFrom;
   final DateTime deadline;
+  // Max minutes to allocate for this task on any single calendar day.
+  // Null means no cap.
+  final int? maxMinutesPerDay;
 
   const SchedulerConfig({
     required this.productivityWindows,
     required this.searchFrom,
     required this.deadline,
+    this.maxMinutesPerDay,
   });
 }
 

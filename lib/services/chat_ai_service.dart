@@ -1,24 +1,51 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/chat_models.dart';
+import 'context_compressor.dart';
+import 'user_profile_service.dart';
 
 class ChatAiService {
   static const _apiKey = String.fromEnvironment('OPENAI_API_KEY');
   static const _endpoint = 'https://api.openai.com/v1/chat/completions';
 
-  static String _buildSystemPrompt() {
+  final _compressor = ContextCompressor();
+
+  static String _buildSystemPrompt(
+    ConversationPhase phase, {
+    String scheduleData = '',
+    String profileHint = '',
+  }) {
     final today = DateTime.now();
-    final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    final todayStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
     final tomorrow = today.add(const Duration(days: 1));
-    final tomorrowStr = '${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}';
-    return _systemPromptTemplate
+    final tomorrowStr =
+        '${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}';
+
+    final schedulePart = scheduleData.isNotEmpty
+        ? '\n\n## User\'s Tasks & Schedule\n$scheduleData'
+        : '';
+    final profilePart =
+        profileHint.isNotEmpty ? '\n\n$profileHint' : '';
+
+    final phaseBody = switch (phase) {
+      ConversationPhase.collectingContext =>
+        _promptCollecting + profilePart,
+      ConversationPhase.awaitingApproval => _promptApproval,
+      // idle and executing both need full tool routing + schedule context
+      _ => _promptToolRouting + profilePart + schedulePart,
+    };
+
+    return (_promptBase + phaseBody)
         .replaceAll('{{TODAY}}', todayStr)
         .replaceAll('{{TOMORROW}}', tomorrowStr);
   }
 
-  static const _systemPromptTemplate = '''
+  // ── Prompt sections ───────────────────────────────────────────────────────
+
+  static const _promptBase = '''
 You are an AI Planning Assistant in a smart scheduling app.
-The ## User's Tasks & Schedule section contains REAL-TIME data from the app.
+Today is {{TODAY}}. Tomorrow is {{TOMORROW}}.
 
 ## Vietnamese weekday mapping (CRITICAL — always apply exactly):
 Thứ 2 (T2) = Monday    = weekday 1
@@ -31,19 +58,35 @@ Chủ nhật (CN) = Sunday = weekday 7
 ALWAYS convert Vietnamese weekday names using this table when filling preferred_weekdays.
 Example: "thứ 2, 4" → [1, 3]  |  "thứ 3, 5" → [2, 4]  |  "mỗi ngày" → [1,2,3,4,5,6,7]
 
+## Rules
+- Convert relative dates to ISO 8601 ONLY when the user explicitly states a date.
+- "ngày mai" / "tomorrow" → {{TOMORROW}}
+- "2 tuần" / "2 weeks" → add 14 days to {{TODAY}}
+- "tháng sau" / "next month" → add 30 days to {{TODAY}}
+- NEVER infer or guess a deadline from words like "deadline", "task", or "goal" alone.
+- Reply in Vietnamese if the user writes Vietnamese, English otherwise.
+- Keep replies concise and action-oriented.
+- NEVER say "I don't have access to your schedule" — the data is in the system prompt.
+''';
+
+  // Used in idle + executing phases (full tool routing)
+  static const _promptToolRouting = '''
 ## When to call tools vs reply text
 
 ### TASK tools (deadline-based work):
-- User starts with "thêm task", "thêm 1 task", "thêm công việc", "thêm 1 công việc", "thêm deadline", "thêm 1 deadline", "add task", "add a task" → decide between collect_plan_info or add_task_direct
+- User starts with "thêm task", "thêm 1 task", "tạo task", "tạo 1 task", "thêm công việc", "tạo công việc", "thêm 1 công việc", "thêm deadline", "thêm 1 deadline", "add task", "add a task", "create task" → decide between collect_plan_info or add_task_direct
   - Call add_task_direct ONLY when user provides ALL of: task name + SPECIFIC CALENDAR DATE (like "ngày 26", "30/5", "2026-05-26") + specific start hour + duration in ONE message.
   - Day-of-week expressions like "thứ 3", "thứ 4 hàng tuần", "mỗi thứ 2" are NOT specific calendar dates → use collect_plan_info.
   - Otherwise (missing info, or multi-session goal) → call collect_plan_info.
+  - "tạo task X" or "tạo 1 task X" WITHOUT full date+time+duration → call collect_plan_info (same as "thêm task").
 - User says they need more time / "không kịp deadline" / "task này khó" → call re_plan_task with userIntent="need_more_time"
 - User says a task is easy / needs less time → call re_plan_task with userIntent="task_is_easier"
 - User wants to move/reschedule a task ("dời sang ngày mai", "shift to next week") → call shift_task
 - User says a task is done/finished → call complete_task
-- User wants to delete an ENTIRE task → call delete_task
-- User wants to delete a specific subtask/session → call delete_subtask
+- User wants to delete something → look at ## User's Tasks & Schedule to decide:
+  - If the name matches a TOP-LEVEL task (listed with its deadline) → call delete_task
+  - If the name matches a SUBTASK/SESSION inside a task → call delete_subtask
+  - When in doubt, PREFER delete_subtask (safer: only removes one session, not the whole task)
 - User wants to delete all tasks → call delete_task with "__ALL__"
 - User says "too much work" / "quá nặng" / "nhẹ hơn" → call adjust_workload
 
@@ -52,7 +95,7 @@ Example: "thứ 2, 4" → [1, 3]  |  "thứ 3, 5" → [2, 4]  |  "mỗi ngày" �
   MODE A — Specific date + specific time (e.g. "đá bóng 1h vào 14h ngày 23/5"):
     → set specific_date (ISO8601 YYYY-MM-DD) + specific_start_hour. System adds one session.
   MODE B — Specific time, recurring weekdays (e.g. "đá bóng 1h vào 14h mỗi ngày", "đọc sách 1h lúc 9h thứ 2 4"):
-    → set specific_start_hour + preferred_weekdays. Leave specific_date null. System adds recurring sessions at that exact hour. Do NOT leave specific_start_hour null when user mentions a time.
+    → set specific_start_hour + preferred_weekdays. Leave specific_date null. System adds recurring sessions at that exact hour.
   MODE C — No specific time, AI suggests (e.g. "đọc sách 1h mỗi thứ 2 4", "AI gợi ý giờ"):
     → set preferred_weekdays only. Leave both specific_date and specific_start_hour null. System will show suggestions for user confirmation before saving.
 - User wants to move an activity ("dời hoạt động", "shift activity") → call shift_activity
@@ -60,29 +103,40 @@ Example: "thứ 2, 4" → [1, 3]  |  "thứ 3, 5" → [2, 4]  |  "mỗi ngày" �
 
 ### SCHEDULE queries:
 - User asks about schedule, today's tasks, tomorrow's tasks, tasks on a specific date, or upcoming deadlines → reply DIRECTLY as text. Do NOT call any tool.
-- The schedule is organized by date in "=== Schedule by date ===" in ## User's Tasks & Schedule — look up the relevant date(s) there.
-- "ngày mai" / "tomorrow" = {{TOMORROW}}
+- The schedule is organized by date in "=== Schedule by date ===" in ## User's Tasks & Schedule.
+- For schedule queries, always read ## User's Tasks & Schedule and give a clear human-readable answer.
+
+### CLARIFICATION RULES — confidence field (shift_task, add_task_direct, adjust_workload, re_plan_task):
+Set confidence='high' ONLY when the user EXPLICITLY stated the info:
+- shift_task: 'high' only if user explicitly stated the exact number of days (e.g. "3 ngày", "1 tuần"). If no number given, set confidence='low' and clarification_needed="Bạn muốn dời task bao nhiêu ngày?".
+- add_task_direct: 'high' only if all 4 fields (name+date+hour+duration) are explicit. If start hour is missing, set confidence='low' and clarification_needed="Bạn muốn bắt đầu lúc mấy giờ?".
+- adjust_workload: 'high' only if task name AND direction are both clear. If task name is missing or vague, set confidence='low' and clarification_needed="Bạn muốn điều chỉnh task nào?".
+- re_plan_task: 'high' only if the task name is clearly stated. If not, set confidence='low' and clarification_needed="Bạn muốn lập kế hoạch lại cho task nào?".
+
+### FUZZY MATCH CONFIRMATION — when task name is abbreviated:
+If the user refers to a task by a SHORT or PARTIAL name (e.g. user says "toán" but the full task name is "Ôn thi Toán"), set confidence='medium' and clarification_needed="Tôi tìm thấy task '[tên đầy đủ]'. Đây có phải task bạn muốn không?" so the user can confirm before any action is taken.
 
 ### Default:
 - Greetings, clarifications, or anything else → reply with text only (NO tool call)
+''';
 
-## Multi-turn context collection (collect_plan_info only)
-The ## Current Context section shows what has been collected for the active plan.
-- If goal/deadline/daily_hours is still missing, call collect_plan_info with newly provided values
-- If the goal is VAGUE (e.g. "study for exam", "prepare presentation", "ôn thi", "làm slide"), ALWAYS ask what specific topics/content/steps are involved BEFORE collecting deadline/daily_hours. Set task_details once the user answers.
-- Collect fields in this order: goal → task_details (if goal is vague) → deadline → daily_hours
-- When ALL THREE (goal + deadline + daily_hours) are present in context → say "Tuyệt vời, tôi đã có đủ thông tin. Đang tạo kế hoạch..." and do NOT call collect_plan_info again
+  // Used only in collectingContext phase
+  static const _promptCollecting = '''
+## Collecting plan information
+You are gathering information to create a study plan. Use collect_plan_info to record each piece of info the user provides.
+- Required fields IN ORDER: goal → task_details → deadline → daily_hours.
+- task_details is ALWAYS required (not only for vague goals). After the user states their goal, ALWAYS ask "What specific steps/topics does this involve?" before asking for the deadline.
+- Ask ONE question at a time. Do NOT ask for multiple fields in the same message.
+- When ALL FOUR (goal, task_details, deadline, daily_hours) are present in ## Current Context → say "Tuyệt vời, tôi đã có đủ thông tin. Đang tạo kế hoạch..." and stop calling collect_plan_info.
+''';
 
-## Rules
-- Today is {{TODAY}}. Convert relative dates to ISO 8601 ONLY when the user explicitly states a date.
-- "ngày mai" / "tomorrow" → {{TOMORROW}}
-- "2 tuần" / "2 weeks" → add 14 days to {{TODAY}}
-- "tháng sau" / "next month" → add 30 days to {{TODAY}}
-- NEVER infer or guess a deadline from words like "deadline", "task", or "goal" alone — only set deadline when the user provides a specific date or time reference.
-- Reply in Vietnamese if the user writes Vietnamese, English otherwise.
-- Keep replies concise and action-oriented.
-- NEVER say "I don't have access to your schedule" — the data is in the system prompt.
-- For schedule queries, always read ## User's Tasks & Schedule and give a clear human-readable answer.
+  // Used only in awaitingApproval phase
+  static const _promptApproval = '''
+## Plan approval
+A study plan has been generated and displayed to the user. Your role:
+- If user approves ("yes", "ok", "lưu", "được", "đồng ý") → confirm it will be saved.
+- If user rejects or asks for changes → acknowledge and ask what they would like to change.
+- Do NOT call any tool in this phase. Reply with text only.
 ''';
 
   static const _tools = [
@@ -134,6 +188,15 @@ The ## Current Context section shows what has been collected for the active plan
               'type': 'integer',
               'description': 'Positive = forward, negative = backward',
             },
+            'confidence': {
+              'type': 'string',
+              'enum': ['high', 'medium', 'low'],
+              'description': 'high: user stated the exact days explicitly. medium: inferred. low: ambiguous.',
+            },
+            'clarification_needed': {
+              'type': 'string',
+              'description': 'Fill when confidence is medium or low. Describe what is unclear (e.g. "How many days forward?").',
+            },
           },
           'required': ['task_name', 'days_offset'],
         },
@@ -172,6 +235,15 @@ The ## Current Context section shows what has been collected for the active plan
               'type': 'string',
               'enum': ['need_more_time', 'task_is_easier'],
               'description': 'need_more_time: user cannot finish on time; task_is_easier: task needs less time',
+            },
+            'confidence': {
+              'type': 'string',
+              'enum': ['high', 'medium', 'low'],
+              'description': 'high: intent is clear. medium: inferred. low: ambiguous.',
+            },
+            'clarification_needed': {
+              'type': 'string',
+              'description': 'Fill when confidence is medium or low. Describe what is unclear.',
             },
           },
           'required': ['task_name', 'user_intent'],
@@ -229,6 +301,15 @@ The ## Current Context section shows what has been collected for the active plan
               'type': 'string',
               'enum': ['lighter', 'heavier'],
             },
+            'confidence': {
+              'type': 'string',
+              'enum': ['high', 'medium', 'low'],
+              'description': 'high: user clearly said lighter/heavier. medium: inferred. low: ambiguous.',
+            },
+            'clarification_needed': {
+              'type': 'string',
+              'description': 'Fill when confidence is medium or low. Describe what is unclear.',
+            },
           },
           'required': ['task_name', 'direction'],
         },
@@ -256,6 +337,15 @@ The ## Current Context section shows what has been collected for the active plan
             'specific_start_hour': {
               'type': 'integer',
               'description': 'Start hour 0-23 (e.g. 14 for 14:00)',
+            },
+            'confidence': {
+              'type': 'string',
+              'enum': ['high', 'medium', 'low'],
+              'description': 'high: all fields explicitly stated. medium: date/time inferred. low: ambiguous.',
+            },
+            'clarification_needed': {
+              'type': 'string',
+              'description': 'Fill when confidence is medium or low. Describe what is unclear (e.g. "What date exactly?").',
             },
           },
           'required': ['task_name', 'duration_minutes', 'specific_date', 'specific_start_hour'],
@@ -345,15 +435,17 @@ The ## Current Context section shows what has been collected for the active plan
     }
 
     final ctxSummary = _buildContextSummary(ctx);
-    final schedulePart = scheduleContext != null
-        ? '\n\n## User\'s Tasks & Schedule\n$scheduleContext'
-        : '';
+    final profileHint = UserProfileService().toPromptString();
 
-    final recent = history.length > 20 ? history.sublist(history.length - 20) : history;
+    final effectiveHistory = await _compressor.maybeCompress(history, _apiKey);
+    final recent = effectiveHistory.length > 20
+        ? effectiveHistory.sublist(effectiveHistory.length - 20)
+        : effectiveHistory;
     final messages = <Map<String, dynamic>>[
       {
         'role': 'system',
-        'content': '${_buildSystemPrompt()}\n\n## Current Context\n$ctxSummary$schedulePart',
+        'content':
+            '${_buildSystemPrompt(ctx.phase, scheduleData: scheduleContext ?? '', profileHint: profileHint)}\n\n## Current Context\n$ctxSummary',
       },
       for (final msg in recent)
         {'role': msg.role.name, 'content': msg.content},
@@ -422,6 +514,8 @@ The ## Current Context section shows what has been collected for the active plan
           return ShiftTaskCall(
             taskName: args['task_name'] as String,
             daysOffset: (args['days_offset'] as num).toInt(),
+            confidence: args['confidence'] as String? ?? 'high',
+            clarificationNeeded: args['clarification_needed'] as String?,
           );
         case 'complete_task':
           return CompleteTaskCall(taskName: args['task_name'] as String);
@@ -429,6 +523,8 @@ The ## Current Context section shows what has been collected for the active plan
           return RePlanTaskCall(
             taskName: args['task_name'] as String,
             userIntent: args['user_intent'] as String? ?? 'need_more_time',
+            confidence: args['confidence'] as String? ?? 'high',
+            clarificationNeeded: args['clarification_needed'] as String?,
           );
         case 'delete_task':
           return DeleteTaskCall(taskName: args['task_name'] as String);
@@ -438,6 +534,8 @@ The ## Current Context section shows what has been collected for the active plan
           return AdjustWorkloadCall(
             taskName: args['task_name'] as String,
             direction: args['direction'] as String,
+            confidence: args['confidence'] as String? ?? 'high',
+            clarificationNeeded: args['clarification_needed'] as String?,
           );
         case 'query_schedule':
           return QueryScheduleCall(timeRange: args['time_range'] as String);
@@ -447,6 +545,8 @@ The ## Current Context section shows what has been collected for the active plan
             durationMinutes: (args['duration_minutes'] as num).toInt(),
             specificDate: args['specific_date'] as String,
             specificStartHour: (args['specific_start_hour'] as num).toInt(),
+            confidence: args['confidence'] as String? ?? 'high',
+            clarificationNeeded: args['clarification_needed'] as String?,
           );
         case 'add_activity':
           final weekdaysRaw = args['preferred_weekdays'] as List<dynamic>?;

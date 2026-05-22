@@ -36,11 +36,14 @@ class ChatPlannerService {
     final deadline =
         rawDeadline.isBefore(minDeadline) ? DateTime.now().add(const Duration(days: 7)) : rawDeadline;
     final goal = ctx.goalDescription ?? 'Unnamed goal';
+    final dailyHours = ctx.dailyAvailableHours;
     final notes = [
       if (ctx.taskDetails != null) ctx.taskDetails!,
       if (ctx.additionalNotes != null) ctx.additionalNotes!,
-      if (ctx.dailyAvailableHours != null)
-        'Available ${ctx.dailyAvailableHours} hours per day.',
+      if (dailyHours != null)
+        'HARD CONSTRAINT: User can only work $dailyHours hour${dailyHours == 1 ? '' : 's'} per day on this task. '
+            'Each subtask duration MUST be ≤ ${dailyHours}h. '
+            'Do NOT generate any subtask longer than ${dailyHours}h.',
       if (ctx.projectType != null) 'Project type: ${ctx.projectType}.',
     ].join(' ');
 
@@ -58,7 +61,7 @@ class ChatPlannerService {
       language: language,
     );
 
-    final config = _buildSchedulerConfig(deadline);
+    final config = _buildSchedulerConfig(deadline, dailyHours: dailyHours);
     final occupied = _storage.getOccupiedTimeRanges(DateTime.now(), deadline);
     final schedule = _schedulerService.scheduleDeadlinePlan(plan, config, occupied);
 
@@ -73,6 +76,9 @@ class ChatPlannerService {
     ConversationContext ctx,
   ) async {
     final goal = ctx.goalDescription ?? 'AI Plan';
+    if (_isDuplicateName(goal, type: 'Task')) {
+      return 'Task "$goal" đã tồn tại. Vui lòng đổi tên hoặc xóa task cũ trước khi lưu kế hoạch mới.';
+    }
     final id = DateTime.now().millisecondsSinceEpoch.toString();
 
     // Flatten all scheduled slots into a sessions array
@@ -176,9 +182,20 @@ class ChatPlannerService {
     final isVi = goal.runes.any((r) => r > 127);
     final language = isVi ? 'Vietnamese' : 'English';
 
+    // Collect existing incomplete session names to force AI to reuse them
+    final existingSubtaskNames = incompleteSessions
+        .map((s) => (s as Map)['taskName'] as String? ?? '')
+        .where((n) => n.isNotEmpty)
+        .join('; ');
+
+    final rePlanNotes = 'Re-planning remaining work. Remaining time: $remainingMinutes minutes. '
+        'IMPORTANT: You MUST reuse these exact subtask names — do NOT rename or replace them: [$existingSubtaskNames]. '
+        'You may adjust their durations or split one subtask into smaller chunks with the same theme, '
+        'but every output subtask name must match or be derived from the names above.';
+
     final plan = await _aiService.generateTaskPlan(
       taskName: goal,
-      notes: 'Re-planning remaining work. Remaining time: $remainingMinutes minutes.',
+      notes: rePlanNotes,
       difficulty: task['difficulty'] as String? ?? 'Medium',
       category: task['category'] as String? ?? 'Study',
       deadline: deadline.isBefore(DateTime.now().add(const Duration(days: 1)))
@@ -272,16 +289,25 @@ class ChatPlannerService {
   }
 
   /// Actually removes the session after user confirmed.
-  Future<void> confirmDeleteSubtask(int taskIdx, int sessionIdx) async {
-    final tasks = _storage.getCustomTasks();
-    if (taskIdx >= tasks.length) return;
-    final task = Map<String, dynamic>.from(tasks[taskIdx]);
+  /// Returns true if deletion succeeded.
+  Future<bool> confirmDeleteSubtask(int taskIdx, int sessionIdx) async {
+    final rawTasks = _storage.getCustomTasks();
+    if (taskIdx < 0 || taskIdx >= rawTasks.length) return false;
+
+    // Build a fully mutable copy to avoid CastList mutation issues
+    final tasks = rawTasks
+        .map((t) => Map<String, dynamic>.from(t))
+        .toList();
+
+    final task = tasks[taskIdx];
     final sessions = task['sessions'];
-    if (sessions is! List) return;
-    final updated = List<dynamic>.from(sessions)..removeAt(sessionIdx);
-    task['sessions'] = updated;
-    tasks[taskIdx] = task;
+    if (sessions is! List) return false;
+    if (sessionIdx < 0 || sessionIdx >= sessions.length) return false;
+
+    final updatedSessions = List<dynamic>.from(sessions)..removeAt(sessionIdx);
+    task['sessions'] = updatedSessions;
     await _storage.saveCustomTasks(tasks);
+    return true;
   }
 
   int _findSessionIndex(List<dynamic> sessions, String query) {
@@ -355,6 +381,10 @@ class ChatPlannerService {
   /// pendingSessions != null means AI-suggested slots awaiting user confirmation — do NOT save yet.
   /// pendingSessions == null means the action is already saved (or an error occurred).
   Future<(String, List<Map<String, dynamic>>?)> addActivity(AddActivityCall call) async {
+    if (_isDuplicateName(call.name, type: 'Activity')) {
+      return ('Hoạt động "${call.name}" đã tồn tại. Vui lòng dùng tên khác hoặc xóa hoạt động cũ.', null);
+    }
+
     // MODE A: specific calendar date + specific time → single one-off session
     if (call.specificDate != null && call.specificStartHour != null) {
       final date = DateTime.tryParse(call.specificDate!);
@@ -582,6 +612,10 @@ class ChatPlannerService {
     String specificDate,
     int startHour,
   ) async {
+    if (_isDuplicateName(taskName, type: 'Task')) {
+      return 'Task "$taskName" đã tồn tại. Vui lòng dùng tên khác hoặc quản lý task hiện có.';
+    }
+
     final date = DateTime.tryParse(specificDate);
     if (date == null) return 'Ngày không hợp lệ.';
 
@@ -721,7 +755,7 @@ class ChatPlannerService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  SchedulerConfig _buildSchedulerConfig(DateTime deadline) {
+  SchedulerConfig _buildSchedulerConfig(DateTime deadline, {int? dailyHours}) {
     final hours = _storage.getProductivityHours();
     final windows = hours
         .map((h) => ProductivityWindow(
@@ -733,7 +767,19 @@ class ChatPlannerService {
       productivityWindows: windows,
       searchFrom: DateTime.now(),
       deadline: deadline,
+      maxMinutesPerDay: dailyHours != null ? dailyHours * 60 : null,
     );
+  }
+
+  // Returns true if a task or activity with the same normalized name already exists.
+  // [type] filters by 'Task' or 'Activity'; null checks both.
+  bool _isDuplicateName(String name, {String? type}) {
+    final tasks = _storage.getCustomTasks();
+    final normalized = _normalize(name);
+    return tasks.any((t) {
+      if (type != null && t['taskType'] != type) return false;
+      return _normalize(t['name'] as String? ?? '') == normalized;
+    });
   }
 
   Map<String, dynamic>? findTask(String name) => _fuzzyFindTask(name);

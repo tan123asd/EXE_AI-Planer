@@ -24,6 +24,9 @@ class SchedulerService {
     final scheduledSlots = <ScheduledSlot>[];
     final failedTasks = <AiSubtask>[];
 
+    // Tracks minutes allocated per calendar day for the daily-cap constraint.
+    final Map<String, int> allocatedPerDay = {};
+
     // Sequential cursor: subtask N+1 starts after subtask N's last session ends.
     // This preserves chapter ordering (ch1 → ch2 → ch3).
     // The old pile-up bug was caused by the urgency bonus, not this constraint.
@@ -50,11 +53,35 @@ class SchedulerService {
         _scoreAndSort(blocks, task, hardOccupied, config);
 
         final best = blocks.first;
+
+        // ── Daily cap check ──────────────────────────────────────────────────
+        if (config.maxMinutesPerDay != null) {
+          final dk = _dayKey(best.start);
+          final usedToday = allocatedPerDay[dk] ?? 0;
+          if (usedToday >= config.maxMinutesPerDay!) {
+            // This day is full — jump to 06:00 the next day.
+            sessionSearchFrom = _startOfNextDay(best.start);
+            continue;
+          }
+        }
+
         final allocate = durationLeft.clamp(minBlockMin, best.durationMinutes);
 
         // Snap allocation to minBlock granularity (round up to next minBlock multiple)
         final sessions = (allocate / minBlockMin).ceil();
-        final actualAlloc = (sessions * minBlockMin).clamp(minBlockMin, best.durationMinutes);
+        int actualAlloc = (sessions * minBlockMin).clamp(minBlockMin, best.durationMinutes);
+
+        // Cap to remaining daily budget.
+        if (config.maxMinutesPerDay != null) {
+          final dk = _dayKey(best.start);
+          final remaining = config.maxMinutesPerDay! - (allocatedPerDay[dk] ?? 0);
+          final cappedSessions = (remaining / minBlockMin).floor();
+          if (cappedSessions <= 0) {
+            sessionSearchFrom = _startOfNextDay(best.start);
+            continue;
+          }
+          actualAlloc = actualAlloc.clamp(minBlockMin, cappedSessions * minBlockMin);
+        }
 
         final slotStart = best.start;
         final slotEnd = slotStart.add(Duration(minutes: actualAlloc));
@@ -76,6 +103,12 @@ class SchedulerService {
         sessionSearchFrom = slotEnd.add(Duration(minutes: breakMin));
         durationLeft -= actualAlloc;
         sessionIdx++;
+
+        // Update per-day tally.
+        if (config.maxMinutesPerDay != null) {
+          final dk = _dayKey(slotStart);
+          allocatedPerDay[dk] = (allocatedPerDay[dk] ?? 0) + actualAlloc;
+        }
       }
 
       // Advance the cross-subtask cursor so the next subtask starts after this one.
@@ -460,6 +493,14 @@ class SchedulerService {
       if (c.start.hour == topHour) c.score += 15;
     }
   }
+
+  // ── Daily-cap helpers ─────────────────────────────────────────────────────
+
+  static String _dayKey(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  static DateTime _startOfNextDay(DateTime dt) =>
+      DateTime(dt.year, dt.month, dt.day + 1, 6, 0);
 
 }
 

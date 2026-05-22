@@ -4,6 +4,8 @@ import '../models/scheduler_models.dart';
 import '../services/chat_ai_service.dart';
 import '../services/chat_planner_service.dart';
 import '../services/storage_service.dart';
+import '../services/tool_guardrails.dart';
+import '../services/user_profile_service.dart';
 import '../utils/constants.dart';
 import '../widgets/chat_message_bubble.dart';
 import '../widgets/chat_plan_preview_card.dart';
@@ -201,6 +203,12 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
   }
 
   Future<void> _dispatchToolCall(AiToolCall call) async {
+    final validationError = ToolGuardrails.validate(call);
+    if (validationError != null) {
+      _addAiMessage('⚠️ Không thể thực hiện: $validationError. Hãy kiểm tra lại yêu cầu.');
+      return;
+    }
+
     switch (call) {
       case TextOnlyResponse(:final content):
         _addAiMessage(content);
@@ -213,10 +221,12 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
           _addAiMessage(_buildNextQuestion());
         }
 
-      case RePlanTaskCall(:final taskName, :final userIntent):
+      case RePlanTaskCall(:final taskName, :final userIntent, :final confidence, :final clarificationNeeded):
+        if (!await _checkClarification(confidence, clarificationNeeded)) return;
         await _handleRePlanTask(taskName, userIntent);
 
-      case ShiftTaskCall(:final taskName, :final daysOffset):
+      case ShiftTaskCall(:final taskName, :final daysOffset, :final confidence, :final clarificationNeeded):
+        if (!await _checkClarification(confidence, clarificationNeeded)) return;
         final result = await _plannerService.shiftTaskByDays(taskName, daysOffset);
         _addAiMessage(result);
 
@@ -237,11 +247,18 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
             parentTask: match.parentTaskName,
           );
           if (confirmed == true) {
-            await _plannerService.confirmDeleteSubtask(match.taskIdx, match.sessionIdx);
-            _addAiMessage(_t(
-              'Removed subtask "${match.sessionName}" from "${match.parentTaskName}".',
-              'Đã xóa subtask "${match.sessionName}" khỏi "${match.parentTaskName}".',
-            ));
+            final deleted = await _plannerService.confirmDeleteSubtask(match.taskIdx, match.sessionIdx);
+            if (deleted) {
+              _addAiMessage(_t(
+                'Removed subtask "${match.sessionName}" from "${match.parentTaskName}".',
+                'Đã xóa subtask "${match.sessionName}" khỏi "${match.parentTaskName}".',
+              ));
+            } else {
+              _addAiMessage(_t(
+                'Could not delete subtask. Please try again.',
+                'Không thể xóa subtask. Vui lòng thử lại.',
+              ));
+            }
           } else {
             _addAiMessage(_t(
               'Cancelled. The subtask has been kept.',
@@ -255,7 +272,10 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
           :final durationMinutes,
           :final specificDate,
           :final specificStartHour,
+          :final confidence,
+          :final clarificationNeeded,
         ):
+        if (!await _checkClarification(confidence, clarificationNeeded)) return;
         final result = await _plannerService.addTaskDirect(
             taskName, durationMinutes, specificDate, specificStartHour);
         _addAiMessage(result);
@@ -295,15 +315,47 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
             _addAiMessage(_t('Understood, all tasks have been kept.', 'Được rồi, tất cả task vẫn được giữ lại.'));
           }
         } else {
-          final confirmed = await _showDeleteConfirm(taskName);
-          if (confirmed == true) {
-            _addAiMessage(await _plannerService.deleteTask(taskName));
+          // If the name doesn't match a top-level task, AI may have misrouted
+          // a subtask name — fall back to subtask deletion flow automatically.
+          final topLevelTask = _plannerService.findTask(taskName);
+          if (topLevelTask == null) {
+            final subtaskMatch = _plannerService.findSubtaskForDelete(taskName);
+            if (subtaskMatch.found) {
+              final confirmed = await _showDeleteSubtaskConfirm(
+                subtaskName: subtaskMatch.sessionName,
+                parentTask: subtaskMatch.parentTaskName,
+              );
+              if (confirmed == true) {
+                final deleted = await _plannerService.confirmDeleteSubtask(
+                    subtaskMatch.taskIdx, subtaskMatch.sessionIdx);
+                _addAiMessage(deleted
+                    ? _t(
+                        'Removed subtask "${subtaskMatch.sessionName}" from "${subtaskMatch.parentTaskName}".',
+                        'Đã xóa subtask "${subtaskMatch.sessionName}" khỏi "${subtaskMatch.parentTaskName}".',
+                      )
+                    : _t('Could not delete subtask. Please try again.',
+                        'Không thể xóa subtask. Vui lòng thử lại.'));
+              } else {
+                _addAiMessage(_t('Cancelled. The subtask has been kept.',
+                    'Đã hủy. Subtask vẫn được giữ lại.'));
+              }
+            } else {
+              _addAiMessage(_t('Could not find a task matching "$taskName".',
+                  'Không tìm thấy task khớp với "$taskName".'));
+            }
           } else {
-            _addAiMessage(_t('Got it, "$taskName" will not be deleted.', 'Được rồi, "$taskName" sẽ không bị xóa.'));
+            final confirmed = await _showDeleteConfirm(taskName);
+            if (confirmed == true) {
+              _addAiMessage(await _plannerService.deleteTask(taskName));
+            } else {
+              _addAiMessage(_t('Got it, "$taskName" will not be deleted.',
+                  'Được rồi, "$taskName" sẽ không bị xóa.'));
+            }
           }
         }
 
-      case AdjustWorkloadCall(:final taskName, :final direction):
+      case AdjustWorkloadCall(:final taskName, :final direction, :final confidence, :final clarificationNeeded):
+        if (!await _checkClarification(confidence, clarificationNeeded)) return;
         await _handleAdjustWorkload(taskName, direction);
 
       case QueryScheduleCall():
@@ -319,6 +371,40 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
     _pendingActivityCategory = null;
     _pendingActivityDurationMinutes = 0;
     _pendingActivityWeekdays = null;
+  }
+
+  // ── Clarification gate ────────────────────────────────────────────────────
+
+  /// Returns true if execution should proceed, false if user cancelled.
+  Future<bool> _checkClarification(String confidence, String? clarification) async {
+    if (confidence == 'high' || clarification == null || clarification.isEmpty) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(_t('Confirm action', 'Xác nhận hành động')),
+        content: Text(clarification),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(_t('Ask again', 'Hỏi lại')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(_t('Continue', 'Tiếp tục')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      _addAiMessage(_t(
+        'Action cancelled. What would you like to do?',
+        'Hành động đã huỷ. Bạn muốn làm gì khác không?',
+      ));
+      return false;
+    }
+    return true;
   }
 
   // ── Language detection ────────────────────────────────────────────────────
@@ -356,6 +442,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
 
   bool _isReadyToPlan() =>
       _context.goalDescription != null &&
+      _context.taskDetails != null &&
       _context.parsedDeadline != null &&
       _context.dailyAvailableHours != null;
 
@@ -377,6 +464,13 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
       return isVi
           ? 'Bạn muốn đạt được điều gì? Hãy mô tả mục tiêu của bạn.'
           : 'What would you like to accomplish? Please describe your goal.';
+    }
+    if (_context.taskDetails == null) {
+      return isVi
+          ? '"${_context.goalDescription}" gồm những việc cụ thể gì? '
+            '(ví dụ: ôn lý thuyết chương 1-3, làm bài tập, viết đề cương...)'
+          : 'What specific steps does "${_context.goalDescription}" involve? '
+            '(e.g., read chapters 1-3, do practice problems, write outline...)';
     }
     if (_context.parsedDeadline == null) {
       return isVi
@@ -545,6 +639,10 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
         // New plan: create new task
         final id = await _plannerService.savePlan(_pendingPlan!, slots, _context);
         _context.acceptedPlanIds.add(id);
+        await UserProfileService().updateFromApprovedPlan(
+          dailyHours: (_context.dailyAvailableHours ?? 2).toDouble(),
+          projectType: _context.projectType ?? '',
+        );
         _context.phase = ConversationPhase.idle;
         _context.reset();
         _pendingPlan = null;

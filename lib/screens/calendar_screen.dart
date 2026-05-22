@@ -329,7 +329,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
               isCompleted: true,
             );
             if (!mounted) return;
-            navigator.pop(); // close sheet
+            navigator.pop();
+            await _loadData();
+          },
+          onDeleteSession: event.sessionIndex >= 0
+              ? () async {
+                  await _storage.deleteTaskSession(
+                    event.taskId,
+                    event.sessionIndex,
+                  );
+                  if (!mounted) return;
+                  navigator.pop();
+                  await _loadData();
+                }
+              : null,
+          onDelete: () async {
+            await _storage.deleteCustomTask(event.taskId);
+            if (!mounted) return;
+            navigator.pop();
             await _loadData();
           },
         );

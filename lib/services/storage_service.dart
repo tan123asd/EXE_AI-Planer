@@ -197,6 +197,32 @@ class StorageService {
     await saveCustomTasks(tasks);
   }
 
+  /// Xóa 1 session khỏi task. Nếu không còn session nào thì xóa luôn task cha.
+  Future<void> deleteTaskSession(String taskId, int sessionIndex) async {
+    final tasks = getCustomTasks();
+    final taskIndex = tasks.indexWhere((t) => (t['id'] ?? '').toString() == taskId);
+    if (taskIndex == -1) return;
+
+    final task = Map<String, dynamic>.from(tasks[taskIndex]);
+    final sessionsAny = task['sessions'];
+    if (sessionsAny is! List) return;
+
+    final sessions = sessionsAny
+        .map((e) => e is Map ? Map<String, dynamic>.from(e) : e)
+        .toList();
+    if (sessionIndex < 0 || sessionIndex >= sessions.length) return;
+
+    sessions.removeAt(sessionIndex);
+
+    if (sessions.isEmpty) {
+      tasks.removeAt(taskIndex);
+    } else {
+      task['sessions'] = sessions;
+      tasks[taskIndex] = task;
+    }
+    await saveCustomTasks(tasks);
+  }
+
   // ==================== GENERATED SCHEDULE ====================
   
   Future<void> saveGeneratedSchedule(List<Map<String, dynamic>> schedule) async {
@@ -501,114 +527,60 @@ class StorageService {
   
   // Check if a time slot conflicts with existing schedule
   bool hasScheduleConflict(DateTime startTime, DateTime endTime) {
-    // Check conflicts with existing schedule items
+    // Check conflicts with legacy generated schedule items
     final schedule = getGeneratedSchedule();
-    
     for (var item in schedule) {
       final itemStart = DateTime.tryParse(item['startTime'] ?? '');
       final itemEnd = DateTime.tryParse(item['endTime'] ?? '');
-      
       if (itemStart != null && itemEnd != null) {
-        // Check overlap
         if (startTime.isBefore(itemEnd) && endTime.isAfter(itemStart)) {
           return true;
         }
       }
     }
-    
-    // 🔧 Check conflicts with recurring Schedules (fixed time slots)
+
     final tasks = getCustomTasks();
-    
     for (var task in tasks) {
-      // 🔧 NEW: Check recurring schedules (fixed time slots only)
+      // Check recurring Schedules (fixed weekday pattern, stored as HH:MM strings)
       if (task['taskType'] == 'Schedules') {
         final weekdays = task['weekdays'];
         final startTimeStr = task['startTime'];
         final endTimeStr = task['endTime'];
-        
         if (weekdays != null && startTimeStr != null && endTimeStr != null) {
           List<int> scheduleWeekdays = [];
-          if (weekdays is List) {
-            scheduleWeekdays = weekdays.cast<int>();
-          }
-          
-          // Check if proposed time falls on one of the recurring days
+          if (weekdays is List) scheduleWeekdays = weekdays.cast<int>();
           if (scheduleWeekdays.contains(startTime.weekday)) {
-            // Parse schedule time (format: "HH:MM")
             final startParts = startTimeStr.toString().split(':');
             final endParts = endTimeStr.toString().split(':');
-            
             if (startParts.length == 2 && endParts.length == 2) {
-              final scheduleStart = DateTime(
-                startTime.year,
-                startTime.month,
-                startTime.day,
-                int.parse(startParts[0]),
-                int.parse(startParts[1]),
-              );
-              
-              final scheduleEnd = DateTime(
-                startTime.year,
-                startTime.month,
-                startTime.day,
-                int.parse(endParts[0]),
-                int.parse(endParts[1]),
-              );
-              
-              // Check time overlap on that day
+              final scheduleStart = DateTime(startTime.year, startTime.month, startTime.day,
+                  int.parse(startParts[0]), int.parse(startParts[1]));
+              final scheduleEnd = DateTime(startTime.year, startTime.month, startTime.day,
+                  int.parse(endParts[0]), int.parse(endParts[1]));
               if (startTime.isBefore(scheduleEnd) && endTime.isAfter(scheduleStart)) {
-                return true; // Conflicts with recurring schedule
+                return true;
               }
             }
           }
         }
       }
-      
-      // 🔧 Check conflicts with Task type (with deadline)
-      if (task['taskType'] == 'Task' && task['deadline'] != null) {
-        final taskDeadline = DateTime.tryParse(task['deadline']);
-        
-        if (taskDeadline != null) {
-          // Get estimated time (stored as int hours or as string)
-          int durationMinutes = 60; // Default 1 hour
-          
-          if (task['estimatedTime'] != null) {
-            if (task['estimatedTime'] is int) {
-              durationMinutes = (task['estimatedTime'] as int) * 60;
-            } else if (task['estimatedTime'] is String) {
-              final estimatedTime = task['estimatedTime'] as String;
-              if (estimatedTime.contains('30 min')) {
-                durationMinutes = 60;
-              } else if (estimatedTime.contains('1 hour')) {
-                durationMinutes = 60;
-              } else if (estimatedTime.contains('2 hours')) {
-                durationMinutes = 120;
-              } else if (estimatedTime.contains('3 hours')) {
-                durationMinutes = 180;
-              } else if (estimatedTime.contains('4 hours')) {
-                durationMinutes = 240;
-              } else if (estimatedTime.contains('5+ hours')) {
-                durationMinutes = 300;
-              }
-            }
-          }
-          
-          // 🔧 Check if task has specific time or just date
-          if (taskDeadline.hour != 0 || taskDeadline.minute != 0) {
-            // Task has specific time - deadline is the START time
-            final taskStart = taskDeadline;
-            final taskEnd = taskDeadline.add(Duration(minutes: durationMinutes));
-            
-            // Check overlap
-            if (startTime.isBefore(taskEnd) && endTime.isAfter(taskStart)) {
+
+      // Check all sessions in Task and Activity items (both store ISO8601 startTime/endTime)
+      final sessions = task['sessions'];
+      if (sessions is List) {
+        for (final s in sessions) {
+          if (s is! Map) continue;
+          final sessionStart = DateTime.tryParse(s['startTime'] as String? ?? '');
+          final sessionEnd = DateTime.tryParse(s['endTime'] as String? ?? '');
+          if (sessionStart != null && sessionEnd != null) {
+            if (startTime.isBefore(sessionEnd) && endTime.isAfter(sessionStart)) {
               return true;
             }
           }
-          // If task only has date (00:00), we don't know exact time, skip conflict check
         }
       }
     }
-    
+
     return false;
   }
   

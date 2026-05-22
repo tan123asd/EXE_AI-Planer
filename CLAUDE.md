@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session Start — MANDATORY
+
+At the start of every new session, run these two codegraph calls BEFORE doing anything else:
+
+1. `codegraph_status` — verify the index is healthy (fileCount, nodeCount)
+2. `codegraph_files` with `path: "lib"` — get the full file tree
+
+This gives instant structural awareness without reading individual files.
+If `.codegraph/` does not exist, ask the user to run `codegraph init -i` in the project root before continuing.
+
+---
+
 ## Project Overview
 
 **EXE AI-Planer** is a cross-platform Flutter app for AI-powered student scheduling. It helps students manage study deadlines and personal development with smart conflict detection, break reminders, and performance tracking.
@@ -373,5 +385,123 @@ Reset via `context.reset()` after plan approval or rejection.
 
 - Model: `gpt-4o-mini`, temperature 0.4
 - API key: `--dart-define=OPENAI_API_KEY=sk-...`
-- History window: last 20 messages
+- History window: last 20 messages (applied after optional context compression)
 - No `response_format: json_object` — uses `tool_choice: auto` instead
+
+---
+
+## Agent Accuracy Improvements (added 2026-05-21)
+
+Five features added to improve task execution accuracy and user-requirement understanding. All are backward-compatible — no existing behavior changed.
+
+### New Files
+
+| File | Role |
+|---|---|
+| `lib/services/tool_guardrails.dart` | Validates tool arguments before execution |
+| `lib/services/user_profile_service.dart` | Singleton that learns user preferences across sessions |
+| `lib/services/context_compressor.dart` | Summarises long chat history via a secondary API call |
+
+### 1. Tool Argument Guardrails (`ToolGuardrails`)
+
+`ToolGuardrails.validate(AiToolCall)` is called at the **top of `_dispatchToolCall()`**, before the switch and before any clarification check.
+
+Returns a non-null error string when arguments are out of range; `_dispatchToolCall()` then adds the error as an AI message (so the model sees it and retries) and returns early.
+
+| Tool | What is validated |
+|---|---|
+| `ShiftTaskCall` / `ShiftActivityCall` | `|daysOffset| > 365` |
+| `AddTaskDirectCall` | Date parseable, not in past, not >2 years away; `durationMinutes` 1–480; `specificStartHour` 6–22 |
+| `AdjustWorkloadCall` | `direction` must be `"lighter"` or `"heavier"` |
+| `AddActivityCall` | `durationMinutes` 1–480 |
+| `CollectPlanInfoCall` | `dailyHours` 0.5–24 (if provided) |
+
+### 2. Clarification Gate
+
+Four tool subclasses carry two optional fields added to both the Dart model and the OpenAI JSON schema:
+
+```dart
+final String confidence;         // 'high' | 'medium' | 'low'  (default: 'high')
+final String? clarificationNeeded;
+```
+
+Affected subclasses: `ShiftTaskCall`, `AddTaskDirectCall`, `AdjustWorkloadCall`, `RePlanTaskCall`.
+
+**Flow:** After the guardrail check, each of those four cases calls `_checkClarification(confidence, clarificationNeeded)` before executing. If `confidence != 'high'` and `clarificationNeeded != null`, an `AlertDialog` is shown. If the user taps "Ask again", `_addAiMessage` adds a cancellation notice and the method returns early.
+
+**System prompt guidance** instructs the model to set `confidence: 'medium'` or `'low'` when the user's intent is ambiguous, and to fill `clarification_needed` with a human-readable question.
+
+### 3. Phase-aware System Prompt
+
+`_buildSystemPrompt()` is no longer a static no-arg method. Signature:
+
+```dart
+static String _buildSystemPrompt(
+  ConversationPhase phase, {
+  String scheduleData = '',
+  String profileHint = '',
+})
+```
+
+The single `_systemPromptTemplate` constant has been split into four named sections:
+
+| Const | Used in phases | ~Tokens |
+|---|---|---|
+| `_promptBase` | All | ~120 |
+| `_promptToolRouting` | `idle`, `executing` | ~300 |
+| `_promptCollecting` | `collectingContext` | ~100 |
+| `_promptApproval` | `awaitingApproval` | ~50 |
+
+`scheduleData` (the real-time schedule block) is only injected in `idle`/`executing` phases.  
+`profileHint` (from `UserProfileService`) is injected in `collectingContext`/`executing` phases.  
+`chat()` passes `ctx.phase` and fetches `UserProfileService().toPromptString()` automatically.
+
+### 4. User Profile Service (`UserProfileService`)
+
+Singleton (`UserProfileService()`). Initialised in `main()` after `StorageService`.
+
+```dart
+await StorageService().init();
+await UserProfileService().init();   // reads SharedPreferences key 'user_profile'
+```
+
+Stored fields (JSON under key `'user_profile'`):
+
+| Field | Type | Description |
+|---|---|---|
+| `avgDailyHours` | double | Rolling average of `dailyAvailableHours` across approved plans |
+| `planCount` | int | Number of plans the user has approved |
+| `projectType` | String | Most recently observed project type |
+
+**Update trigger:** `_approvePlan()` in `chat_planner_screen.dart` (new-plan branch only) calls `UserProfileService().updateFromApprovedPlan(dailyHours, projectType)` after a successful save.
+
+`toPromptString()` returns empty string when `planCount == 0` — nothing is injected for first-time users.
+
+**Storage key:** `'user_profile'`
+
+### 5. Context Compression (`ContextCompressor`)
+
+`ContextCompressor().maybeCompress(history, apiKey)` is called inside `ChatAiService.chat()` before the 20-message window is applied.
+
+- **Trigger:** `history.length > 30`
+- **Strategy:** Keeps the 10 most-recent messages; summarises the rest with a single `gpt-4o-mini` call (`max_tokens: 150`, `temperature: 0.2`). The summary is prepended as an `assistant` message.
+- **Fallback:** On API failure, returns the 10 most-recent messages (no crash, no data loss).
+- **When key is empty:** Returns history unchanged (safe in dev without API key).
+
+The compression is transparent to storage — `_persistState()` in the screen still saves the full `_messages` list (up to 100 per `_maxChatMessages`).
+
+### Execution order in `_dispatchToolCall()`
+
+```
+1. ToolGuardrails.validate(call)        → error message + return if invalid
+2. _checkClarification(confidence, …)   → confirm dialog + return if cancelled
+3. execute action (switch case)
+```
+
+### Storage Keys (updated)
+
+| Key | Value |
+|---|---|
+| `'chat_history'` | JSON list of `ChatMessage` (last 100 kept) |
+| `'chat_context'` | JSON of current `ConversationContext` |
+| `'user_profile'` | JSON with `avgDailyHours`, `planCount`, `projectType` |

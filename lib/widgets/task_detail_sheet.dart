@@ -8,6 +8,8 @@ class TaskDetailSheet extends StatelessWidget {
   final DateTime sessionEnd;
   final bool isCompleted;
   final Future<void> Function() onMarkCompleted;
+  final Future<void> Function()? onDelete;
+  final Future<void> Function()? onDeleteSession;
 
   const TaskDetailSheet({
     super.key,
@@ -16,6 +18,8 @@ class TaskDetailSheet extends StatelessWidget {
     required this.sessionEnd,
     required this.isCompleted,
     required this.onMarkCompleted,
+    this.onDelete,
+    this.onDeleteSession,
   });
 
   @override
@@ -161,29 +165,83 @@ class TaskDetailSheet extends StatelessWidget {
 
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: isCompleted ? null : () => onMarkCompleted(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor:
-                          AppColors.textSecondary.withOpacity(0.25),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isCompleted ? null : () => onMarkCompleted(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor:
+                              AppColors.textSecondary.withOpacity(0.25),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Text(
+                          isCompleted ? 'Completed' : 'Mark completed',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
+                        ),
                       ),
                     ),
-                    child: Text(
-                      isCompleted ? 'Completed' : 'Mark completed',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
+                    if (onDeleteSession != null) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: () => _confirmDeleteSession(context),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.danger,
+                            side: const BorderSide(color: AppColors.danger),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Text(
+                            'Xóa buổi này',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                    ],
+                    if (onDelete != null) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: () => _confirmDelete(context),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.danger,
+                            side: BorderSide(
+                              color: AppColors.danger.withValues(alpha: 0.5),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Text(
+                            'Xóa toàn bộ task',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],
@@ -191,6 +249,52 @@ class TaskDetailSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteSession(BuildContext context) async {
+    final timeText = '${_hhmm(sessionStart)}–${_hhmm(sessionEnd)}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xóa buổi này'),
+        content: Text('Xóa buổi $timeText khỏi task này?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await onDeleteSession!();
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final title = (task['name'] ?? 'task').toString();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xóa task'),
+        content: Text('Bạn có chắc muốn xóa "$title" và tất cả các buổi học của nó?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await onDelete!();
   }
 
   String _hhmm(DateTime dt) =>
