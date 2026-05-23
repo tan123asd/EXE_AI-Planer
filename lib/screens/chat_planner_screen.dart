@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ai_study_planner/l10n/app_localizations.dart';
 import '../models/chat_models.dart';
 import '../models/scheduler_models.dart';
 import '../services/chat_ai_service.dart';
@@ -41,17 +42,33 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
   int _pendingActivityDurationMinutes = 0;
   List<int>? _pendingActivityWeekdays;
 
-  static const List<_QuickChip> _quickChips = [
-    _QuickChip('Create a Plan', Icons.add_task),
-    _QuickChip('Modify Task', Icons.edit_calendar),
-    _QuickChip('Mark Done', Icons.check_circle_outline),
-    _QuickChip('Reduce Load', Icons.self_improvement),
+  List<_QuickChip> _getQuickChips(AppLocalizations l10n) => [
+    _QuickChip(l10n.chipCreatePlan, Icons.add_task),
+    _QuickChip(l10n.chipModifyTask, Icons.edit_calendar),
+    _QuickChip(l10n.chipMarkDone, Icons.check_circle_outline),
+    _QuickChip(l10n.chipReduceLoad, Icons.self_improvement),
   ];
+
+  bool _welcomeAdded = false;
 
   @override
   void initState() {
     super.initState();
     _loadHistory();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_welcomeAdded && _messages.isEmpty) {
+      _welcomeAdded = true;
+      setState(() {
+        _messages.add(ChatMessage(
+          role: MessageRole.assistant,
+          content: AppLocalizations.of(context)!.chatWelcome,
+        ));
+      });
+    }
   }
 
   @override
@@ -76,38 +93,13 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
         }
       }
 
-      if (_messages.isEmpty) {
-        _messages.add(ChatMessage(
-          role: MessageRole.assistant,
-          content:
-              'Xin chào! Tôi là AI Planning Assistant 🤖\n\n'
-              'Gõ "hướng dẫn" để xem cách sử dụng, hoặc bắt đầu ngay:\n'
-              '• Thêm task/công việc → "thêm task ..."\n'
-              '• Thêm hoạt động → "thêm hoạt động ..."\n'
-              '• Hỏi tôi bất cứ điều gì về lịch của bạn!',
-        ));
-      }
+      // Welcome message is added in didChangeDependencies (after l10n is available)
     });
   }
 
   // ── Send & Dispatch ───────────────────────────────────────────────────────
 
-  static const _helpText =
-      '📖 HƯỚNG DẪN SỬ DỤNG\n\n'
-      '📌 TASK (có deadline hoặc giờ cụ thể):\n'
-      '  Bắt đầu bằng: "thêm task", "thêm 1 task", "thêm công việc", "thêm deadline"\n'
-      '  Ví dụ: "thêm task họp nhóm 2h vào 14h ngày 26"\n'
-      '  Ví dụ: "thêm task làm báo cáo cho môn học — AI sẽ gợi ý lịch trình"\n\n'
-      '🏃 HOẠT ĐỘNG (sở thích/thói quen):\n'
-      '  Bắt đầu bằng: "thêm hoạt động", "thêm 1 hoạt động"\n'
-      '  Ví dụ: "thêm hoạt động đá bóng 1h vào 14h ngày 23"\n'
-      '  Ví dụ: "thêm hoạt động đọc sách 1h mỗi ngày, AI gợi ý giờ"\n\n'
-      '✏️ QUẢN LÝ:\n'
-      '  "dời task [tên] sang [ngày]"\n'
-      '  "xóa task [tên]" / "xóa subtask [tên]"\n'
-      '  "xóa hoạt động [tên]" / "dời hoạt động [tên] X ngày"\n'
-      '  "hoàn thành [tên task]"\n'
-      '  "lịch hôm nay" / "lịch tuần này"';
+  String _getHelpText() => AppLocalizations.of(context)!.chatHelpText;
 
   static final _helpPattern =
       RegExp(r'^(hướng dẫn|huong dan|help|usage|hd)$', caseSensitive: false);
@@ -127,7 +119,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
       final userMsg = ChatMessage(role: MessageRole.user, content: trimmed);
       setState(() {
         _messages.add(userMsg);
-        _messages.add(ChatMessage(role: MessageRole.assistant, content: _helpText));
+        _messages.add(ChatMessage(role: MessageRole.assistant, content: _getHelpText()));
       });
       _persistState();
       _scrollToBottom();
@@ -962,7 +954,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        children: _quickChips.map((chip) {
+        children: _getQuickChips(AppLocalizations.of(context)!).map((chip) {
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: GestureDetector(
@@ -1019,7 +1011,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
               textCapitalization: TextCapitalization.sentences,
               onSubmitted: _sendMessage,
               decoration: InputDecoration(
-                hintText: 'Tell me your goal or ask anything...',
+                hintText: AppLocalizations.of(context)!.chatPlaceholder,
                 hintStyle: AppTextStyles.bodySecondary,
                 filled: true,
                 fillColor: AppColors.background,

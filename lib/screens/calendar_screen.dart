@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:ai_study_planner/l10n/app_localizations.dart';
+import 'package:intl/intl.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
 import '../widgets/day_timeline.dart';
@@ -147,6 +149,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final locale = Localizations.localeOf(context).toLanguageTag();
     final day1 = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
     final day2 = day1.add(const Duration(days: 1));
     final eventsDay1 = [
@@ -173,12 +177,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _getMonthName(_selectedDate.month),
+                    DateFormat('MMMM', locale).format(DateTime(_selectedDate.year, _selectedDate.month)),
                     style: AppTextStyles.heading1.copyWith(fontSize: 26),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${_selectedDate.year}, Vietnam',
+                    '${_selectedDate.year}, ${l10n.countryVietnam}',
                     style: AppTextStyles.caption.copyWith(
                       color: AppColors.textSecondary,
                       fontSize: 12,
@@ -217,9 +221,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
-                      'Refresh',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                    child: Text(
+                      l10n.refresh,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ],
@@ -235,14 +239,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        '${_weekdayShort(day1.weekday)} ${day1.day}',
+                        '${DateFormat('EEE', locale).format(day1)} ${day1.day}',
                         style: AppTextStyles.heading3,
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        '${_weekdayShort(day2.weekday)} ${day2.day}',
+                        '${DateFormat('EEE', locale).format(day2)} ${day2.day}',
                         style: AppTextStyles.heading3,
                       ),
                     ),
@@ -257,7 +261,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   boxShadow: AppShadows.card,
                 ),
                 child: Text(
-                  '$totalCount tasks',
+                  l10n.tasksCount(totalCount),
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -352,19 +356,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
         );
       },
     );
-  }
-
-  String _getMonthName(int month) {
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    return months[month - 1];
-  }
-
-  String _weekdayShort(int weekday) {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return days[(weekday - 1).clamp(0, 6)];
   }
 
   /// Returns (startHour, endHour) focusing on hours that contain events.

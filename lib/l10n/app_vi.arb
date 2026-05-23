@@ -1,0 +1,201 @@
+{
+  "@@locale": "vi",
+
+  "appTitle": "AI Lập Lịch Học Tập",
+  "tagline": "Cân bằng Học tập, Cuộc sống và Phát triển",
+  "getStarted": "Bắt đầu",
+
+  "haveUpdates": "Hôm nay bạn có gì cần cập nhật không?",
+  "yes": "CÓ",
+  "no": "KHÔNG",
+
+  "navHome": "Trang chủ",
+  "navChat": "Trò chuyện",
+  "navCalendar": "Lịch",
+  "navProfile": "Hồ sơ",
+
+  "greetingMorning": "Chào buổi sáng",
+  "greetingAfternoon": "Chào buổi chiều",
+  "greetingEvening": "Chào buổi tối",
+
+  "todayOverview": "TỔNG QUAN HÔM NAY",
+  "planCompletion": "Hoàn thành kế hoạch",
+  "done": "xong",
+  "tasksToday": "Task hôm nay",
+  "dayStreak": "Chuỗi ngày",
+  "focusHours": "Giờ tập trung",
+  "todaySubjectBalance": "CÂN BẰNG MÔN HỌC HÔM NAY",
+  "todaySchedule": "Lịch hôm nay",
+  "viewAll": "Xem tất cả",
+  "noTasksYet": "Chưa có task",
+  "addFirstTask": "Nhấn nút + để thêm task đầu tiên",
+  "recurringSchedules": "Lịch cố định",
+  "weeklyRoutines": "Lịch lặp hàng tuần",
+  "noRecurringSchedules": "Không có lịch cố định",
+  "addWeeklySchedules": "Thêm lịch lặp theo tuần",
+  "notSet": "Chưa đặt",
+  "until": "Đến",
+  "coachNoTasks": "Chưa có task. Thêm mục đầu tiên để tạo kế hoạch thông minh hơn.",
+  "coachAllDone": "Đã hoàn thành tất cả kế hoạch hôm nay. Tiếp tục phát huy nhé!",
+  "coachItemsLeft": "Còn {count} mục hôm nay. Hoàn thành mục tiếp theo trước khi chuyển sang việc khác.",
+  "@coachItemsLeft": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "coachStartWith": "Bắt đầu với {name}. Đây là mục tốn công sức nhất trong kế hoạch hôm nay.",
+  "@coachStartWith": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "partOf": "Phần {part}/{total}",
+  "@partOf": {
+    "placeholders": {
+      "part": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "sessionOf": "Buổi {part}/{total}",
+  "@sessionOf": {
+    "placeholders": {
+      "part": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "sessions": "{count} buổi",
+  "@sessions": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+
+  "editProfile": "Chỉnh sửa hồ sơ",
+  "notifications": "Thông báo",
+  "settings": "Cài đặt",
+  "helpSupport": "Hỗ trợ",
+  "about": "Giới thiệu",
+  "language": "Ngôn ngữ",
+  "studentRole": "Học sinh / Sinh viên",
+  "productivityHours": "Giờ làm việc hiệu quả",
+  "productivityHoursDesc": "Các task cần tập trung cao sẽ được xếp lịch trong khoảng giờ này.",
+  "noWindowsConfigured": "Chưa cấu hình. Nhấn Thêm để đặt giờ tập trung cao nhất.",
+  "add": "Thêm",
+  "editProfileInfo": "Chỉnh sửa thông tin cá nhân",
+  "fullName": "Họ và tên",
+  "email": "Email",
+  "phone": "Số điện thoại",
+  "bio": "Giới thiệu bản thân",
+  "cancel": "Hủy",
+  "save": "Lưu",
+  "logout": "Đăng xuất",
+  "logoutConfirm": "Bạn có chắc muốn đăng xuất không?",
+  "profileUpdated": "Cập nhật hồ sơ thành công!",
+  "endTimeError": "Giờ kết thúc phải sau giờ bắt đầu",
+  "loggedOut": "Đăng xuất thành công",
+  "selectStartFocus": "Chọn giờ bắt đầu tập trung",
+  "selectEndFocus": "Chọn giờ kết thúc tập trung",
+
+  "aiScheduleTitle": "Lịch trình do AI tạo",
+  "aiScheduleDesc": "Lịch trình cá nhân hoá đã được tạo dựa trên task và sở thích của bạn.",
+  "regenerate": "Tạo lại",
+  "saveSchedule": "Lưu lịch trình",
+  "scheduleRefreshed": "Lịch đã được làm mới!",
+  "scheduleSaved": "Lịch trình và task đã lưu thành công!",
+
+  "chatWelcome": "Xin chào! Tôi là AI Planning Assistant 🤖\n\nGõ \"hướng dẫn\" để xem cách sử dụng, hoặc bắt đầu ngay:\n• Thêm task/công việc → \"thêm task ...\"\n• Thêm hoạt động → \"thêm hoạt động ...\"\n• Hỏi tôi bất cứ điều gì về lịch của bạn!",
+  "chatHelpText": "📖 HƯỚNG DẪN SỬ DỤNG\n\n📌 TASK (có deadline hoặc giờ cụ thể):\n  Bắt đầu bằng: \"thêm task\", \"thêm 1 task\", \"thêm công việc\", \"thêm deadline\"\n  Ví dụ: \"thêm task họp nhóm 2h vào 14h ngày 26\"\n  Ví dụ: \"thêm task làm báo cáo cho môn học — AI sẽ gợi ý lịch trình\"\n\n🏃 HOẠT ĐỘNG (sở thích/thói quen):\n  Bắt đầu bằng: \"thêm hoạt động\", \"thêm 1 hoạt động\"\n  Ví dụ: \"thêm hoạt động đá bóng 1h vào 14h ngày 23\"\n  Ví dụ: \"thêm hoạt động đọc sách 1h mỗi ngày, AI gợi ý giờ\"\n\n✏️ QUẢN LÝ:\n  \"dời task [tên] sang [ngày]\"\n  \"xóa task [tên]\" / \"xóa subtask [tên]\"\n  \"xóa hoạt động [tên]\" / \"dời hoạt động [tên] X ngày\"\n  \"hoàn thành [tên task]\"\n  \"lịch hôm nay\" / \"lịch tuần này\"",
+  "chipCreatePlan": "Lên kế hoạch",
+  "chipModifyTask": "Chỉnh sửa task",
+  "chipMarkDone": "Đánh dấu xong",
+  "chipReduceLoad": "Giảm tải",
+
+  "taskTypeSchedules": "Lịch cố định",
+  "taskTypeTask": "Task",
+  "taskTypeActivity": "Hoạt động",
+  "difficultyEasy": "Dễ",
+  "difficultyMedium": "Vừa",
+  "difficultyHard": "Khó",
+  "categoryStudy": "Học tập",
+  "categoryPersonal": "Cá nhân",
+  "categoryHealth": "Sức khoẻ",
+  "categorySkill": "Kỹ năng",
+  "categoryOther": "Khác",
+
+  "addTask": "Thêm nhiệm vụ",
+  "sectionCategory": "Loại",
+  "sectionTaskTitle": "Tên nhiệm vụ",
+  "sectionDescription": "Mô tả",
+  "sectionDeadline": "Thời hạn",
+  "sectionStartTime": "Giờ bắt đầu",
+  "sectionEndTime": "Giờ kết thúc",
+  "sectionEndDateOptional": "Ngày kết thúc (Tùy chọn)",
+  "sectionDuration": "Thời lượng (phút)",
+  "sectionDailyTimeLimit": "Giới hạn giờ mỗi ngày",
+  "sectionDates": "Ngày trong tuần",
+  "sectionAiTimePlanning": "AI Lập kế hoạch",
+  "sectionDifficulty": "Độ khó",
+  "hintTaskTitle": "Ví dụ: Thuyết trình marketing",
+  "hintDescription": "Những việc cần làm, các bước và giai đoạn chính.",
+  "hintDurationMinutes": "Nhập thời lượng (phút)",
+  "hintSubtaskName": "Tên nhiệm vụ phụ",
+  "selectDateAndTime": "Chọn ngày và giờ",
+  "selectStartTime": "Chọn giờ bắt đầu",
+  "selectEndTime": "Chọn giờ kết thúc",
+  "noEndDate": "Không có ngày kết thúc (lặp mãi)",
+  "scheduleStopRepeating": "Lịch sẽ dừng lặp sau ngày này",
+  "maxHoursPerDay": "Số giờ tối đa cho nhiệm vụ này mỗi ngày",
+  "noLimit": "Không giới hạn",
+  "hoursPerDay": "{h}h / ngày",
+  "@hoursPerDay": {
+    "placeholders": {
+      "h": { "type": "int" }
+    }
+  },
+  "validateTaskName": "Vui lòng nhập tên nhiệm vụ",
+  "validateDescription": "Vui lòng nhập mô tả",
+  "validateTaskNameAndDesc": "Vui lòng điền tên và mô tả nhiệm vụ",
+  "validateScheduleRange": "Vui lòng điền tên, ngày và khoảng thời gian",
+  "validateScheduleDuration": "Vui lòng điền tên, ngày và thời lượng",
+  "pleaseSelectDay": "Vui lòng chọn ít nhất một ngày cho lịch lặp",
+  "pleaseSetStartEnd": "Vui lòng đặt giờ bắt đầu và kết thúc",
+  "pleaseSetDuration": "Vui lòng đặt thời lượng hợp lệ (phút)",
+  "pleaseGenerateAI": "Vui lòng tạo lại lịch AI sau khi thay đổi",
+  "aiWillEstimate": "AI sẽ tự động ước tính công sức từ tiêu đề, môn học, ghi chú và độ khó.",
+  "aiRecommendation": "Đề xuất AI",
+  "aiEstimateLabel": "Ước tính AI",
+  "estimatedEffort": "Ước tính công sức: ",
+  "suggestedSchedule": "Lịch đề xuất:",
+  "tapToSelect": "Nhấn để chọn/bỏ chọn  •  Nhấn ",
+  "toAdjustTimes": " để điều chỉnh giờ",
+  "createYourOwnSlot": "Tạo khung giờ của bạn",
+  "selectedTime": "Thời gian đã chọn",
+  "adjustSchedule": "Điều chỉnh lịch",
+  "changeDatesAndTimes": "Thay đổi ngày và giờ phù hợp với lịch của bạn",
+  "resetBtn": "Đặt lại",
+  "confirmBtn": "Xác nhận",
+  "editBtn": "Sửa",
+  "editEstimatedEffort": "Chỉnh sửa ước tính công sức",
+  "adjustHowLong": "Điều chỉnh thời gian cần thiết. AI sẽ tạo lại đề xuất lịch.",
+  "applyAndRegenerate": "Áp dụng & Tạo lại",
+  "sessionLabel": "Buổi",
+  "sessionNLabel": "Buổi {n}",
+  "@sessionNLabel": {
+    "placeholders": {
+      "n": { "type": "int" }
+    }
+  },
+  "generating": "Đang tạo...",
+  "generateSmartSchedule": "Tạo lịch thông minh",
+  "addSchedule": "Thêm lịch",
+  "addToMyPlan": "Thêm vào kế hoạch",
+  "refresh": "Làm mới",
+  "tasksCount": "{count} nhiệm vụ",
+  "@tasksCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "countryVietnam": "Việt Nam",
+  "chatPlaceholder": "Hãy nói mục tiêu hoặc hỏi bất cứ điều gì..."
+}

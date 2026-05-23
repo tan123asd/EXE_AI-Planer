@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ai_study_planner/l10n/app_localizations.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
 import '../services/ai_service.dart';
@@ -161,25 +162,26 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   }
 
   void _generateAIEstimate() async {
+    final l10n = AppLocalizations.of(context)!;
     // 🔧 Validation based on task type
     bool isValid = false;
     String errorMessage = '';
-    
+
     if (_taskType == 'Task') {
       // Task validation: task title and description required.
       isValid = _formKey.currentState!.validate();
-      errorMessage = 'Please fill in task name and description';
+      errorMessage = l10n.validateTaskNameAndDesc;
     } else if (_taskType == 'Schedules') {
       // Schedules validation: needs weekdays and start/end time
-      isValid = _formKey.currentState!.validate() && 
-                _selectedWeekdays.isNotEmpty && 
-                _scheduleStartTime != null && 
+      isValid = _formKey.currentState!.validate() &&
+                _selectedWeekdays.isNotEmpty &&
+                _scheduleStartTime != null &&
                 _scheduleEndTime != null;
-      errorMessage = 'Please fill in task name, dates, and time range';
+      errorMessage = l10n.validateScheduleRange;
 
       if (isValid && !_isValidScheduleTimeRange(_scheduleStartTime!, _scheduleEndTime!)) {
         isValid = false;
-        errorMessage = 'End time must be after start time';
+        errorMessage = l10n.endTimeError;
       }
     } else {
       // Activity validation: needs weekdays + duration minutes
@@ -187,7 +189,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           _selectedWeekdays.isNotEmpty &&
           _activityDurationMinutes != null &&
           _activityDurationMinutes! > 0;
-      errorMessage = 'Please fill in task name, dates, and duration';
+      errorMessage = l10n.validateScheduleDuration;
     }
     
     if (isValid) {
@@ -861,16 +863,16 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Adjust Schedule',
-                              style: TextStyle(
+                            Text(
+                              AppLocalizations.of(context)!.adjustSchedule,
+                              style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.textPrimary,
                               ),
                             ),
                             Text(
-                              'Change dates & times to fit your availability',
+                              AppLocalizations.of(context)!.changeDatesAndTimes,
                               style: TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textSecondary.withOpacity(0.85),
@@ -896,7 +898,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                           setSheetState(() {});
                         },
                         icon: const Icon(Icons.restart_alt, size: 15),
-                        label: const Text('Reset'),
+                        label: Text(AppLocalizations.of(context)!.resetBtn),
                         style: TextButton.styleFrom(
                           foregroundColor: AppColors.textSecondary,
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -917,9 +919,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     final durationLabel = duration >= 60
                         ? '${duration ~/ 60}h${duration % 60 > 0 ? ' ${duration % 60}m' : ''}'
                         : '${duration}min';
+                    final sl10n = AppLocalizations.of(context)!;
                     final sessionLabel = localSessions.length > 1
-                        ? 'Session ${sIdx + 1}'
-                        : 'Session';
+                        ? sl10n.sessionNLabel(sIdx + 1)
+                        : sl10n.sessionLabel;
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 10),
@@ -1038,7 +1041,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 setSheetState(() {});
                               },
                               icon: const Icon(Icons.schedule, size: 15),
-                              label: const Text('Edit'),
+                              label: Text(AppLocalizations.of(context)!.editBtn),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
@@ -1076,9 +1079,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      child: const Text(
-                        'Confirm',
-                        style: TextStyle(
+                      child: Text(
+                        AppLocalizations.of(context)!.confirmBtn,
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1180,9 +1183,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Edit Estimated Effort',
-                    style: TextStyle(
+                  Text(
+                    AppLocalizations.of(context)!.editEstimatedEffort,
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
@@ -1190,7 +1193,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Adjust how long this task should take. AI will regenerate schedule suggestions.',
+                    AppLocalizations.of(context)!.adjustHowLong,
                     style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary.withOpacity(0.9),
@@ -1273,9 +1276,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      child: const Text(
-                        'Apply & Regenerate',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      child: Text(
+                        AppLocalizations.of(context)!.applyAndRegenerate,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -1384,18 +1387,17 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   }
   
   Future<void> _addTaskToPlan() async {
+    final l10n = AppLocalizations.of(context)!;
     // For Task type, require a fresh AI preview before adding.
     if (_taskType == 'Task' &&
         (!_showAIPreview || _lastGeneratedSignature != _buildPlanningSignature())) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
-            children: const [
-              Icon(Icons.info_outline, color: Colors.white, size: 20),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text('Please generate AI schedule again after your latest changes'),
-              ),
+            children: [
+              const Icon(Icons.info_outline, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
+              Expanded(child: Text(l10n.pleaseGenerateAI)),
             ],
           ),
           backgroundColor: AppColors.textPrimary,
@@ -1414,12 +1416,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
-              children: const [
-                Icon(Icons.warning, color: Colors.white, size: 20),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text('Please select at least one day for recurring schedule'),
-                ),
+              children: [
+                const Icon(Icons.warning, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Expanded(child: Text(l10n.pleaseSelectDay)),
               ],
             ),
             backgroundColor: AppColors.danger,
@@ -1437,12 +1437,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(
-                children: const [
-                  Icon(Icons.warning, color: Colors.white, size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text('Please set start and end time for schedule'),
-                  ),
+                children: [
+                  const Icon(Icons.warning, color: Colors.white, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(l10n.pleaseSetStartEnd)),
                 ],
               ),
               backgroundColor: AppColors.danger,
@@ -1459,12 +1457,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(
-                children: const [
-                  Icon(Icons.warning, color: Colors.white, size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text('End time must be after start time'),
-                  ),
+                children: [
+                  const Icon(Icons.warning, color: Colors.white, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(l10n.endTimeError)),
                 ],
               ),
               backgroundColor: AppColors.danger,
@@ -1481,12 +1477,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(
-                children: const [
-                  Icon(Icons.warning, color: Colors.white, size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text('Please set a valid duration (minutes) for activity'),
-                  ),
+                children: [
+                  const Icon(Icons.warning, color: Colors.white, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(l10n.pleaseSetDuration)),
                 ],
               ),
               backgroundColor: AppColors.danger,
@@ -1527,12 +1521,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
-            children: const [
-              Icon(Icons.warning, color: Colors.white, size: 20),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text('Please complete all required fields'),
-              ),
+            children: [
+              const Icon(Icons.warning, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
+              Expanded(child: Text(l10n.validateTaskNameAndDesc)),
             ],
           ),
           backgroundColor: AppColors.danger,
@@ -1705,6 +1697,24 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     return AppColors.subjectAccentColor(category);
   }
 
+  String _getTaskTypeLabel(String type, AppLocalizations l10n) {
+    switch (type) {
+      case 'Task': return l10n.taskTypeTask;
+      case 'Schedules': return l10n.taskTypeSchedules;
+      case 'Activity': return l10n.taskTypeActivity;
+      default: return type;
+    }
+  }
+
+  String _getDifficultyLabel(String diff, AppLocalizations l10n) {
+    switch (diff) {
+      case 'Easy': return l10n.difficultyEasy;
+      case 'Medium': return l10n.difficultyMedium;
+      case 'Hard': return l10n.difficultyHard;
+      default: return diff;
+    }
+  }
+
   Widget _buildSectionLabel(String label, IconData icon) {
     return Row(
       children: [
@@ -1790,20 +1800,21 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, 
-                          color: AppColors.textPrimary, 
+          icon: const Icon(Icons.arrow_back_ios,
+                          color: AppColors.textPrimary,
                           size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Add Task',
-          style: TextStyle(
+        title: Text(
+          l10n.addTask,
+          style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -1825,7 +1836,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildSectionLabel('Category', Icons.label_outlined),
+                        _buildSectionLabel(l10n.sectionCategory, Icons.label_outlined),
                         const SizedBox(height: 16),
                         Row(
                           children: _taskTypes.map((type) {
@@ -1868,7 +1879,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     ),
                                     child: Center(
                                       child: Text(
-                                        type,
+                                        _getTaskTypeLabel(type, l10n),
                                         style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
@@ -1893,12 +1904,12 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildSectionLabel('Task Title', Icons.edit_outlined),
+                        _buildSectionLabel(l10n.sectionTaskTitle, Icons.edit_outlined),
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _taskNameController,
-                          decoration: const InputDecoration(
-                            hintText: 'e.g. Marketing presentation slides',
+                          decoration: InputDecoration(
+                            hintText: l10n.hintTaskTitle,
                             hintStyle: TextStyle(
                               color: Color(0xFFCCCCCC),
                               fontSize: 16,
@@ -1913,7 +1924,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'Please enter a task name';
+                              return l10n.validateTaskName;
                             }
                             return null;
                           },
@@ -1935,13 +1946,13 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSectionLabel('Description', Icons.description_outlined),
+                          _buildSectionLabel(l10n.sectionDescription, Icons.description_outlined),
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: _notesController,
                             maxLines: 4,
                             decoration: InputDecoration(
-                              hintText: 'What needs to be done, key steps, and phases.',
+                              hintText: l10n.hintDescription,
                               hintStyle: const TextStyle(
                                 color: Color(0xFFCCCCCC),
                                 fontSize: 14,
@@ -1956,7 +1967,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                             ),
                             validator: (value) {
                               if (_taskType == 'Task' && (value == null || value.trim().isEmpty)) {
-                                return 'Please enter a description';
+                                return l10n.validateDescription;
                               }
                               return null;
                             },
@@ -1979,7 +1990,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSectionLabel('Dates', Icons.date_range_outlined),
+                          _buildSectionLabel(l10n.sectionDates, Icons.date_range_outlined),
                           const SizedBox(height: 16),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2005,7 +2016,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSectionLabel('Deadline', Icons.calendar_today_outlined),
+                          _buildSectionLabel(l10n.sectionDeadline, Icons.calendar_today_outlined),
                           const SizedBox(height: 16),
                           InkWell(
                             onTap: () => _selectDeadline(context),
@@ -2019,7 +2030,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 color: AppColors.background,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: _deadline != null 
+                                  color: _deadline != null
                                       ? AppColors.primary.withOpacity(0.3)
                                       : Colors.transparent,
                                   width: 1.5,
@@ -2029,8 +2040,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 children: [
                                   Icon(
                                     Icons.event,
-                                    color: _deadline != null 
-                                        ? AppColors.primary 
+                                    color: _deadline != null
+                                        ? AppColors.primary
                                         : AppColors.textSecondary,
                                     size: 20,
                                   ),
@@ -2039,7 +2050,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     child: Text(
                                       _deadline != null && _deadlineTime != null
                                           ? '${DateFormat('d MMM yyyy').format(_deadline!)} • ${_deadlineTime!.format(context)}'
-                                          : 'Select date and time',
+                                          : l10n.selectDateAndTime,
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w500,
@@ -2070,7 +2081,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSectionLabel('Start time', Icons.access_time),
+                          _buildSectionLabel(l10n.sectionStartTime, Icons.access_time),
                           const SizedBox(height: 16),
                           InkWell(
                             onTap: () async {
@@ -2128,7 +2139,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     child: Text(
                                       _scheduleStartTime != null
                                           ? _scheduleStartTime!.format(context)
-                                          : 'Select start time',
+                                          : l10n.selectStartTime,
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w500,
@@ -2155,7 +2166,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSectionLabel('End time', Icons.access_time_filled),
+                          _buildSectionLabel(l10n.sectionEndTime, Icons.access_time_filled),
                           const SizedBox(height: 16),
                           InkWell(
                             onTap: () async {
@@ -2213,7 +2224,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     child: Text(
                                       _scheduleEndTime != null
                                           ? _scheduleEndTime!.format(context)
-                                          : 'Select end time',
+                                          : l10n.selectEndTime,
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w500,
@@ -2242,10 +2253,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSectionLabel('End Date (Optional)', Icons.event_busy_outlined),
+                          _buildSectionLabel(l10n.sectionEndDateOptional, Icons.event_busy_outlined),
                           const SizedBox(height: 8),
                           Text(
-                            'Schedule will stop repeating after this date',
+                            l10n.scheduleStopRepeating,
                             style: TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondary.withOpacity(0.7),
@@ -2310,7 +2321,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     child: Text(
                                       _scheduleEndDate != null
                                           ? DateFormat('d MMM yyyy').format(_scheduleEndDate!)
-                                          : 'No end date (runs forever)',
+                                          : l10n.noEndDate,
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w500,
@@ -2350,13 +2361,13 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSectionLabel('Duration (minutes)', Icons.timelapse),
+                          _buildSectionLabel(l10n.sectionDuration, Icons.timelapse),
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: _activityDurationController,
                             keyboardType: TextInputType.number,
                             decoration: InputDecoration(
-                              hintText: 'Enter duration in minutes',
+                              hintText: l10n.hintDurationMinutes,
                               prefixIcon: const Icon(Icons.timer_outlined),
                               filled: true,
                               fillColor: AppColors.background,
@@ -2384,10 +2395,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSectionLabel('Daily Time Limit', Icons.schedule_outlined),
+                          _buildSectionLabel(l10n.sectionDailyTimeLimit, Icons.schedule_outlined),
                           const SizedBox(height: 6),
                           Text(
-                            'Max hours to schedule for this task per day',
+                            l10n.maxHoursPerDay,
                             style: TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondary.withOpacity(0.7),
@@ -2399,8 +2410,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                             runSpacing: 8,
                             children: [null, 1, 2, 3, 4, 5].map<Widget>((h) {
                               final isSelected = _dailyHoursLimit == h;
-                              final label =
-                                  h == null ? 'No limit' : '${h}h / day';
+                              final label = h == null ? l10n.noLimit : l10n.hoursPerDay(h);
                               return GestureDetector(
                                 onTap: () {
                                   setState(() {
@@ -2450,7 +2460,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSectionLabel('AI Time Planning', Icons.auto_awesome_outlined),
+                          _buildSectionLabel(l10n.sectionAiTimePlanning, Icons.auto_awesome_outlined),
                           const SizedBox(height: 8),
                           Container(
                             width: double.infinity,
@@ -2473,7 +2483,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'AI will estimate effort automatically from task title, subject, notes, and difficulty.',
+                                    l10n.aiWillEstimate,
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: AppColors.textSecondary.withOpacity(0.95),
@@ -2494,7 +2504,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildSectionLabel('Difficulty', Icons.speed_outlined),
+                        _buildSectionLabel(l10n.sectionDifficulty, Icons.speed_outlined),
                         const SizedBox(height: 16),
                         Row(
                           children: _difficulties.map((diff) {
@@ -2529,13 +2539,13 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                       ),
                                     ),
                                     child: Text(
-                                      diff,
+                                      _getDifficultyLabel(diff, l10n),
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w600,
-                                        color: isSelected 
-                                            ? Colors.white 
+                                        color: isSelected
+                                            ? Colors.white
                                             : AppColors.textPrimary,
                                       ),
                                     ),
@@ -2595,7 +2605,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   ),
                                   const SizedBox(width: 12),
                                   Text(
-                                    _taskType == 'Task' ? 'AI recommendation' : 'AI Estimate',
+                                    _taskType == 'Task' ? l10n.aiRecommendation : l10n.aiEstimateLabel,
                                     style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
@@ -2619,9 +2629,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                       size: 20,
                                     ),
                                     const SizedBox(width: 12),
-                                    const Text(
-                                      'Estimated effort: ',
-                                      style: TextStyle(
+                                    Text(
+                                      l10n.estimatedEffort,
+                                      style: const TextStyle(
                                         fontSize: 14,
                                         color: AppColors.textSecondary,
                                       ),
@@ -2656,9 +2666,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              const Text(
-                                'Suggested schedule:',
-                                style: TextStyle(
+                              Text(
+                                l10n.suggestedSchedule,
+                                style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   color: AppColors.textSecondary,
@@ -2673,9 +2683,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     color: AppColors.textSecondary,
                                   ),
                                   const SizedBox(width: 4),
-                                  const Text(
-                                    'Tap to select/deselect  •  Tap ',
-                                    style: TextStyle(
+                                  Text(
+                                    l10n.tapToSelect,
+                                    style: const TextStyle(
                                       fontSize: 11,
                                       color: AppColors.textSecondary,
                                     ),
@@ -2685,9 +2695,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     size: 12,
                                     color: AppColors.primary,
                                   ),
-                                  const Text(
-                                    ' to adjust times',
-                                    style: TextStyle(
+                                  Text(
+                                    l10n.toAdjustTimes,
+                                    style: const TextStyle(
                                       fontSize: 11,
                                       color: AppColors.textSecondary,
                                     ),
@@ -2854,9 +2864,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               // Create your own slot (Task & Activity)
                               if (_taskType == 'Task' || _taskType == 'Activity') ...[
                                 const SizedBox(height: 20),
-                                const Text(
-                                  'Create your own slot',
-                                  style: TextStyle(
+                                Text(
+                                  l10n.createYourOwnSlot,
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: AppColors.textSecondary,
@@ -2872,9 +2882,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   ),
                                   child: TextField(
                                     controller: _customSubtaskNameController,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Subtask name',
-                                      hintStyle: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                    decoration: InputDecoration(
+                                      hintText: l10n.hintSubtaskName,
+                                      hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                                       isDense: true,
                                       border: InputBorder.none,
                                       contentPadding: EdgeInsets.zero,
@@ -3121,9 +3131,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               // Selected Time (Task & Activity)
                               if ((_taskType == 'Task' || _taskType == 'Activity') && _getSelectedTimeSlots().isNotEmpty) ...[
                                 const SizedBox(height: 20),
-                                const Text(
-                                  'Selected Time',
-                                  style: TextStyle(
+                                Text(
+                                  l10n.selectedTime,
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.textSecondary,
@@ -3236,8 +3246,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                         child: _isGenerating
                             ? Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
-                                  SizedBox(
+                                children: [
+                                  const SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
@@ -3245,10 +3255,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   ),
-                                  SizedBox(width: 12),
+                                  const SizedBox(width: 12),
                                   Text(
-                                    'Generating...',
-                                    style: TextStyle(
+                                    l10n.generating,
+                                    style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white,
@@ -3258,12 +3268,12 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               )
                             : Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
-                                  Icon(Icons.auto_awesome, size: 20),
-                                  SizedBox(width: 8),
+                                children: [
+                                  const Icon(Icons.auto_awesome, size: 20),
+                                  const SizedBox(width: 8),
                                   Text(
-                                    'Generate Smart Schedule',
-                                    style: TextStyle(
+                                    l10n.generateSmartSchedule,
+                                    style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -3288,14 +3298,14 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.add_task, size: 20),
-                            SizedBox(width: 8),
+                            const Icon(Icons.add_task, size: 20),
+                            const SizedBox(width: 8),
                             Text(
-                              'Add Schedule',
-                              style: TextStyle(
+                              l10n.addSchedule,
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -3324,9 +3334,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: const Text(
-                          'Add to My Plan',
-                          style: TextStyle(
+                        child: Text(
+                          l10n.addToMyPlan,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),

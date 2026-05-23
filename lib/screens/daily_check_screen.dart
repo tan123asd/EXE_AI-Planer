@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ai_study_planner/l10n/app_localizations.dart';
 import '../utils/constants.dart';
 import 'home_screen.dart';
 
@@ -7,6 +8,7 @@ class DailyCheckScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -16,7 +18,6 @@ class DailyCheckScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Spacer(),
-              // Main Card
               Container(
                 padding: const EdgeInsets.all(AppSpacing.xl),
                 decoration: BoxDecoration(
@@ -26,7 +27,6 @@ class DailyCheckScreen extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    // Icon
                     Container(
                       padding: const EdgeInsets.all(AppSpacing.lg),
                       decoration: BoxDecoration(
@@ -40,14 +40,12 @@ class DailyCheckScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.lg),
-                    // Title
-                    const Text(
-                      'Do you have any updates for today?',
+                    Text(
+                      l10n.haveUpdates,
                       style: AppTextStyles.heading2,
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: AppSpacing.xl),
-                    // YES Button
                     SizedBox(
                       width: double.infinity,
                       height: 56,
@@ -67,9 +65,9 @@ class DailyCheckScreen extends StatelessWidget {
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          'YES',
-                          style: TextStyle(
+                        child: Text(
+                          l10n.yes,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -77,7 +75,6 @@ class DailyCheckScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    // NO Button
                     SizedBox(
                       width: double.infinity,
                       height: 56,
@@ -99,9 +96,9 @@ class DailyCheckScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(AppRadius.md),
                           ),
                         ),
-                        child: const Text(
-                          'NO',
-                          style: TextStyle(
+                        child: Text(
+                          l10n.no,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
