@@ -134,6 +134,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
         initialTime: _deadlineTime ?? TimeOfDay.now(),
+        initialEntryMode: TimePickerEntryMode.input,
         builder: (context, child) {
           return Theme(
             data: Theme.of(context).copyWith(
@@ -1016,6 +1017,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     hour: start.hour,
                                     minute: start.minute,
                                   ),
+                                  initialEntryMode: TimePickerEntryMode.input,
                                   builder: (ctx, child) => Theme(
                                     data: pickerTheme,
                                     child: child!,
@@ -1369,6 +1371,10 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           conflicts.add('Scheduled slot');
         }
       }
+    }
+    // Also check against already-saved tasks/schedules/activities in storage
+    if (_storage.hasScheduleConflict(newStart, newEnd)) {
+      conflicts.add('Existing scheduled block');
     }
     return conflicts.toSet().toList(); // deduplicate
   }
@@ -2088,6 +2094,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               final TimeOfDay? picked = await showTimePicker(
                                 context: context,
                                 initialTime: _scheduleStartTime ?? TimeOfDay.now(),
+                                initialEntryMode: TimePickerEntryMode.input,
                                 builder: (context, child) {
                                   return Theme(
                                     data: Theme.of(context).copyWith(
@@ -2173,6 +2180,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               final TimeOfDay? picked = await showTimePicker(
                                 context: context,
                                 initialTime: _scheduleEndTime ?? TimeOfDay.now(),
+                                initialEntryMode: TimePickerEntryMode.input,
                                 builder: (context, child) {
                                   return Theme(
                                     data: Theme.of(context).copyWith(

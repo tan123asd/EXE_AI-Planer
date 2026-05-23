@@ -9,7 +9,11 @@ class AiServiceException implements Exception {
   String toString() => 'AiServiceException: $message';
 }
 
-const _systemPrompt = '''
+String _buildSystemPrompt(String language) => '''
+## LANGUAGE RULE — HIGHEST PRIORITY
+ALL subtask "name" fields MUST be written in $language. No exceptions. Do not mix languages.
+${language == 'Vietnamese' ? 'Viết tên subtask bằng tiếng Việt tự nhiên, rõ ràng, có động từ hành động.' : ''}
+
 You are an expert student task planner. Your job is to decompose a study or personal goal into concrete, actionable subtasks for a student\'s schedule.
 
 ## Output Format
@@ -18,7 +22,7 @@ Return ONLY a valid JSON object with this exact structure — no explanation, no
   "tasks": [
     {
       "order": <int, starts at 1>,
-      "name": "<string, specific action verb + object, e.g. \'Read chapter 3-4\', \'Write introduction draft\'>",
+      "name": "<string in $language, specific action verb + object>",
       "duration": <float, total hours needed, one of: 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0>,
       "focus_level": "<\'high\' | \'medium\' | \'low\'>",
       "min_block": <float, minimum continuous hours per session, must satisfy: duration % min_block == 0 and min_block <= duration>,
@@ -63,13 +67,19 @@ Return ONLY a valid JSON object with this exact structure — no explanation, no
 8. If the notes include "HARD CONSTRAINT: User can only work X hours per day", then EVERY subtask duration MUST be ≤ X hours. This is a strict limit — never generate a subtask with duration > the stated daily limit.
 
 ## Examples
+${language == 'Vietnamese' ? '''
+Mục tiêu: "Hoàn thành bài tập cấu trúc dữ liệu", Độ ưu tiên: cao, 3 ngày đến deadline
+Tasks: Ôn lý thuyết danh sách liên kết (1.0h, high, 0.5), Viết class Node (1.5h, high, 0.5), Cài đặt các phương thức LinkedList (2.0h, high, 1.0), Viết test cases (1.0h, medium, 0.5), Debug và hoàn thiện (1.0h, high, 0.5)
 
+Mục tiêu: "Chuẩn bị thuyết trình tiếng Anh", Độ ưu tiên: trung bình, 5 ngày đến deadline
+Tasks: Tìm kiếm tài liệu và nguồn tham khảo (1.5h, medium, 0.5), Lập dàn ý và viết kịch bản (2.0h, high, 1.0), Thiết kế slide (1.5h, medium, 0.5), Luyện tập một mình (1.0h, medium, 1.0), Chạy thử với bấm giờ (1.0h, medium, 1.0)
+''' : '''
 Goal: "Complete data structures assignment", Priority: high, 3 days to deadline
 Tasks: Review linked list theory (1.0h, high, 0.5), Implement Node class (1.5h, high, 0.5), Implement LinkedList methods (2.0h, high, 1.0), Write test cases (1.0h, medium, 0.5), Debug and finalize (1.0h, high, 0.5)
 
 Goal: "Prepare for English presentation", Priority: medium, 5 days to deadline
 Tasks: Research topic and gather sources (1.5h, medium, 0.5), Create outline and script (2.0h, high, 1.0), Design slides (1.5h, medium, 0.5), Practice delivery alone (1.0h, medium, 1.0), Rehearse with timer (1.0h, medium, 1.0)
-''';
+'''}''';
 
 class AiService {
   static const _apiKey = String.fromEnvironment('OPENAI_API_KEY');
@@ -105,14 +115,14 @@ class AiService {
         'Priority: $priority\n'
         'Current time: ${_formatDatetime(DateTime.now())}\n'
         'Deadline: ${_formatDatetime(deadline)}\n'
-        'IMPORTANT: Write ALL subtask names in $language. Do not use any other language.';
+        'Output language: $language — ALL subtask names MUST be in $language.';
 
     final body = jsonEncode({
       'model': 'gpt-4o-mini',
       'temperature': 0.3,
       'response_format': {'type': 'json_object'},
       'messages': [
-        {'role': 'system', 'content': _systemPrompt},
+        {'role': 'system', 'content': _buildSystemPrompt(language)},
         {'role': 'user', 'content': userMessage},
       ],
     });

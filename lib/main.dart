@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:ai_study_planner/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
-import 'screens/splash_screen.dart';
+import 'screens/home_screen.dart';
 import 'utils/constants.dart';
 import 'services/storage_service.dart';
 import 'services/user_profile_service.dart';
@@ -62,7 +62,7 @@ class MyApp extends StatelessWidget {
         Locale('en'),
         Locale('vi'),
       ],
-      home: const SplashScreen(),
+      home: const HomeScreen(),
     );
   }
 }

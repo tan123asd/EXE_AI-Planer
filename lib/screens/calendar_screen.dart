@@ -311,11 +311,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _onEventTap(DayTimelineEvent event) async {
-    // Fixed schedule events (sessionIndex -1) are read-only, skip detail sheet
-    if (event.sessionIndex < 0) return;
     final task = _findTaskById(event.taskId);
     if (task == null) return;
     final navigator = Navigator.of(context);
+    final isSchedule = event.sessionIndex < 0;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -325,18 +324,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
           task: task,
           sessionStart: event.start,
           sessionEnd: event.end,
-          isCompleted: event.isCompleted,
-          onMarkCompleted: () async {
-            await _storage.setTaskSessionCompleted(
-              event.taskId,
-              sessionIndex: event.sessionIndex,
-              isCompleted: true,
-            );
-            if (!mounted) return;
-            navigator.pop();
-            await _loadData();
-          },
-          onDeleteSession: event.sessionIndex >= 0
+          isCompleted: isSchedule ? true : event.isCompleted,
+          onMarkCompleted: isSchedule
+              ? () async {}
+              : () async {
+                  await _storage.setTaskSessionCompleted(
+                    event.taskId,
+                    sessionIndex: event.sessionIndex,
+                    isCompleted: true,
+                  );
+                  if (!mounted) return;
+                  navigator.pop();
+                  await _loadData();
+                },
+          onDeleteSession: !isSchedule
               ? () async {
                   await _storage.deleteTaskSession(
                     event.taskId,

@@ -57,7 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
       
       // 🆕 Filter tasks for today
       _todayTasks = allTasks.where((task) {
-        // Schedules: check if today's weekday is in the weekdays list
+        // Schedules are shown in Calendar only
+        if ((task['taskType'] ?? '') == 'Schedules') return false;
+
+        // Activity: check if today's weekday is in the weekdays list
         if (_isRecurringType(task)) {
           final weekdays = task['weekdays'];
           if (weekdays == null || weekdays is! List) return false;
