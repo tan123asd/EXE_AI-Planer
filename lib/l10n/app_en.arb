@@ -1,0 +1,201 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "AI Study Planner",
+  "tagline": "Balance Study, Life, and Growth",
+  "getStarted": "Get Started",
+
+  "haveUpdates": "Do you have any updates for today?",
+  "yes": "YES",
+  "no": "NO",
+
+  "navHome": "Home",
+  "navChat": "Chat",
+  "navCalendar": "Calendar",
+  "navProfile": "Profile",
+
+  "greetingMorning": "Good Morning",
+  "greetingAfternoon": "Good Afternoon",
+  "greetingEvening": "Good Evening",
+
+  "todayOverview": "TODAY OVERVIEW",
+  "planCompletion": "Plan completion",
+  "done": "done",
+  "tasksToday": "Tasks today",
+  "dayStreak": "Day streak",
+  "focusHours": "Focus hours",
+  "todaySubjectBalance": "TODAY'S SUBJECT BALANCE",
+  "todaySchedule": "Today's Schedule",
+  "viewAll": "View all",
+  "noTasksYet": "No tasks yet",
+  "addFirstTask": "Tap the + button to add your first task",
+  "recurringSchedules": "Recurring Schedules",
+  "weeklyRoutines": "Your weekly routines",
+  "noRecurringSchedules": "No recurring schedules",
+  "addWeeklySchedules": "Add schedules that repeat weekly",
+  "notSet": "Not set",
+  "until": "Until",
+  "coachNoTasks": "No tasks yet. Add your first item to generate a smarter plan.",
+  "coachAllDone": "Everything planned for today is completed. Keep the momentum going.",
+  "coachItemsLeft": "{count} items left today. Finish the next one before switching context.",
+  "@coachItemsLeft": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "coachStartWith": "Start with {name}. It is the highest-effort item in your plan today.",
+  "@coachStartWith": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "partOf": "Part {part}/{total}",
+  "@partOf": {
+    "placeholders": {
+      "part": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "sessionOf": "Session {part}/{total}",
+  "@sessionOf": {
+    "placeholders": {
+      "part": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "sessions": "{count} sessions",
+  "@sessions": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+
+  "editProfile": "Edit Profile",
+  "notifications": "Notifications",
+  "settings": "Settings",
+  "helpSupport": "Help & Support",
+  "about": "About",
+  "language": "Language",
+  "studentRole": "Student",
+  "productivityHours": "Productivity Hours",
+  "productivityHoursDesc": "High-focus tasks are scheduled within these hours.",
+  "noWindowsConfigured": "No windows configured. Tap Add to set your peak focus hours.",
+  "add": "Add",
+  "editProfileInfo": "Edit Profile Information",
+  "fullName": "Full Name",
+  "email": "Email",
+  "phone": "Phone Number",
+  "bio": "Bio",
+  "cancel": "Cancel",
+  "save": "Save",
+  "logout": "Logout",
+  "logoutConfirm": "Are you sure you want to logout?",
+  "profileUpdated": "Profile updated successfully!",
+  "endTimeError": "End time must be after start time",
+  "loggedOut": "Logged out successfully",
+  "selectStartFocus": "Select start of focus window",
+  "selectEndFocus": "Select end of focus window",
+
+  "aiScheduleTitle": "AI Generated Schedule",
+  "aiScheduleDesc": "Your personalized schedule has been generated based on your tasks and preferences.",
+  "regenerate": "Regenerate",
+  "saveSchedule": "Save Schedule",
+  "scheduleRefreshed": "Schedule refreshed!",
+  "scheduleSaved": "Schedule and task saved successfully!",
+
+  "chatWelcome": "Hello! I am AI Planning Assistant 🤖\n\nType \"guide\" to see usage, or start right away:\n• Add task → \"add task ...\"\n• Add activity → \"add activity ...\"\n• Ask me anything about your schedule!",
+  "chatHelpText": "📖 USAGE GUIDE\n\n📌 TASK (with deadline or specific time):\n  Start with: \"add task\", \"add deadline\"\n  Example: \"add task team meeting 2h at 2pm on the 26th\"\n  Example: \"add task write report for subject — AI will suggest schedule\"\n\n🏃 ACTIVITY (hobbies/habits):\n  Start with: \"add activity\"\n  Example: \"add activity football 1h at 2pm on the 23rd\"\n  Example: \"add activity reading 1h every day, AI suggests time\"\n\n✏️ MANAGE:\n  \"move task [name] to [date]\"\n  \"delete task [name]\" / \"delete subtask [name]\"\n  \"delete activity [name]\" / \"move activity [name] X days\"\n  \"complete [task name]\"\n  \"today's schedule\" / \"this week's schedule\"",
+  "chipCreatePlan": "Create a Plan",
+  "chipModifyTask": "Modify Task",
+  "chipMarkDone": "Mark Done",
+  "chipReduceLoad": "Reduce Load",
+
+  "taskTypeSchedules": "Schedules",
+  "taskTypeTask": "Task",
+  "taskTypeActivity": "Activity",
+  "difficultyEasy": "Easy",
+  "difficultyMedium": "Medium",
+  "difficultyHard": "Hard",
+  "categoryStudy": "Study",
+  "categoryPersonal": "Personal",
+  "categoryHealth": "Health",
+  "categorySkill": "Skill",
+  "categoryOther": "Other",
+
+  "addTask": "Add Task",
+  "sectionCategory": "Category",
+  "sectionTaskTitle": "Task Title",
+  "sectionDescription": "Description",
+  "sectionDeadline": "Deadline",
+  "sectionStartTime": "Start time",
+  "sectionEndTime": "End time",
+  "sectionEndDateOptional": "End Date (Optional)",
+  "sectionDuration": "Duration (minutes)",
+  "sectionDailyTimeLimit": "Daily Time Limit",
+  "sectionDates": "Dates",
+  "sectionAiTimePlanning": "AI Time Planning",
+  "sectionDifficulty": "Difficulty",
+  "hintTaskTitle": "e.g. Marketing presentation slides",
+  "hintDescription": "What needs to be done, key steps, and phases.",
+  "hintDurationMinutes": "Enter duration in minutes",
+  "hintSubtaskName": "Subtask name",
+  "selectDateAndTime": "Select date and time",
+  "selectStartTime": "Select start time",
+  "selectEndTime": "Select end time",
+  "noEndDate": "No end date (runs forever)",
+  "scheduleStopRepeating": "Schedule will stop repeating after this date",
+  "maxHoursPerDay": "Max hours to schedule for this task per day",
+  "noLimit": "No limit",
+  "hoursPerDay": "{h}h / day",
+  "@hoursPerDay": {
+    "placeholders": {
+      "h": { "type": "int" }
+    }
+  },
+  "validateTaskName": "Please enter a task name",
+  "validateDescription": "Please enter a description",
+  "validateTaskNameAndDesc": "Please fill in task name and description",
+  "validateScheduleRange": "Please fill in task name, dates, and time range",
+  "validateScheduleDuration": "Please fill in task name, dates, and duration",
+  "pleaseSelectDay": "Please select at least one day for recurring schedule",
+  "pleaseSetStartEnd": "Please set start and end time for schedule",
+  "pleaseSetDuration": "Please set a valid duration (minutes) for activity",
+  "pleaseGenerateAI": "Please generate AI schedule again after your latest changes",
+  "aiWillEstimate": "AI will estimate effort automatically from task title, subject, notes, and difficulty.",
+  "aiRecommendation": "AI recommendation",
+  "aiEstimateLabel": "AI Estimate",
+  "estimatedEffort": "Estimated effort: ",
+  "suggestedSchedule": "Suggested schedule:",
+  "tapToSelect": "Tap to select/deselect  •  Tap ",
+  "toAdjustTimes": " to adjust times",
+  "createYourOwnSlot": "Create your own slot",
+  "selectedTime": "Selected Time",
+  "adjustSchedule": "Adjust Schedule",
+  "changeDatesAndTimes": "Change dates & times to fit your availability",
+  "resetBtn": "Reset",
+  "confirmBtn": "Confirm",
+  "editBtn": "Edit",
+  "editEstimatedEffort": "Edit Estimated Effort",
+  "adjustHowLong": "Adjust how long this task should take. AI will regenerate schedule suggestions.",
+  "applyAndRegenerate": "Apply & Regenerate",
+  "sessionLabel": "Session",
+  "sessionNLabel": "Session {n}",
+  "@sessionNLabel": {
+    "placeholders": {
+      "n": { "type": "int" }
+    }
+  },
+  "generating": "Generating...",
+  "generateSmartSchedule": "Generate Smart Schedule",
+  "addSchedule": "Add Schedule",
+  "addToMyPlan": "Add to My Plan",
+  "refresh": "Refresh",
+  "tasksCount": "{count} tasks",
+  "@tasksCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "countryVietnam": "Vietnam",
+  "chatPlaceholder": "Tell me your goal or ask anything..."
+}

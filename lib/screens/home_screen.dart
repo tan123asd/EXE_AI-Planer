@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ai_study_planner/l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 import '../models/task.dart';
 import '../utils/constants.dart';
@@ -12,6 +13,7 @@ import 'new_task_input_screen.dart';
 import 'tasks_screen.dart';
 import 'calendar_screen.dart';
 import 'profile_screen.dart';
+import 'chat_planner_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -55,7 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
       
       // 🆕 Filter tasks for today
       _todayTasks = allTasks.where((task) {
-        // Schedules: check if today's weekday is in the weekdays list
+        // Schedules are shown in Calendar only
+        if ((task['taskType'] ?? '') == 'Schedules') return false;
+
+        // Activity: check if today's weekday is in the weekdays list
         if (_isRecurringType(task)) {
           final weekdays = task['weekdays'];
           if (weekdays == null || weekdays is! List) return false;
@@ -125,6 +130,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _handleTaskStatusChange(String taskId, TaskStatus newStatus) async {
+    // If this is a session item, it has composite id: "<taskId>::<sessionIndex>"
+    if (taskId.contains('::')) {
+      final parts = taskId.split('::');
+      if (parts.length == 2) {
+        final parentId = parts[0];
+        final sessionIndex = int.tryParse(parts[1]);
+        if (sessionIndex != null) {
+          await _storage.setTaskSessionCompleted(
+            parentId,
+            sessionIndex: sessionIndex,
+            isCompleted: newStatus == TaskStatus.completed,
+          );
+          _loadData();
+          return;
+        }
+      }
+    }
+
     String statusString = 'pending';
     if (newStatus == TaskStatus.completed) {
       statusString = 'completed';
@@ -137,6 +160,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   TaskStatus _getTaskStatus(String taskId) {
+    if (taskId.contains('::')) {
+      final parts = taskId.split('::');
+      if (parts.length == 2) {
+        final parentId = parts[0];
+        final sessionIndex = int.tryParse(parts[1]);
+        if (sessionIndex != null) {
+          final tasks = _storage.getCustomTasks();
+          final t = tasks.firstWhere(
+            (m) => (m['id'] ?? '').toString() == parentId,
+            orElse: () => <String, dynamic>{},
+          );
+          final sessions = t['sessions'];
+          if (sessions is List &&
+              sessionIndex >= 0 &&
+              sessionIndex < sessions.length) {
+            final s = sessions[sessionIndex];
+            if (s is Map && s['isCompleted'] == true) {
+              return TaskStatus.completed;
+            }
+          }
+          return TaskStatus.pending;
+        }
+      }
+    }
+
     if (_storage.isTaskCompleted(taskId)) {
       return TaskStatus.completed;
     } else if (_storage.isTaskInProgress(taskId)) {
@@ -162,6 +210,32 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isRecurringType(task)) {
       final type = (task['taskType'] ?? '').toString();
       if (type == 'Activity') {
+        // If Activity has concrete sessions, show today's sessions time range(s)
+        final sessions = task['sessions'];
+        if (sessions is List && sessions.isNotEmpty) {
+          final today = DateTime.now();
+          final todayDate = DateTime(today.year, today.month, today.day);
+          final todayRanges = <String>[];
+          for (final session in sessions) {
+            if (session is! Map) continue;
+            try {
+              final st = DateTime.parse((session['startTime'] ?? '').toString());
+              final en = DateTime.parse((session['endTime'] ?? '').toString());
+              final sd = DateTime(st.year, st.month, st.day);
+              if (!sd.isAtSameMomentAs(todayDate)) continue;
+              todayRanges.add(
+                '${_formatTimeWith24H(st)} - ${_formatTimeWith24H(en, isRangeEnd: true)}',
+              );
+            } catch (_) {
+              // ignore bad session parse
+            }
+          }
+          if (todayRanges.isNotEmpty) {
+            if (todayRanges.length == 1) return todayRanges.first;
+            return '${todayRanges.length} sessions\n${todayRanges.join('\n')}';
+          }
+        }
+
         final est = task['estimatedMinutes'];
         int? minutes;
         if (est is int && est > 0) {
@@ -195,12 +269,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (task['taskType'] == 'Task') {
       final sessions = task['sessions'];
       
-      // 🆕 If task has sessions, find today's session
+      // 🆕 If task has sessions, list today's sessions (not just the first one)
       if (sessions != null && sessions is List && sessions.isNotEmpty) {
         final today = DateTime.now();
         final todayDate = DateTime(today.year, today.month, today.day);
-        
-        // Find session for today
+
+        final todayRanges = <String>[];
         for (var session in sessions) {
           try {
             final sessionStart = DateTime.parse(session['startTime']);
@@ -208,11 +282,18 @@ class _HomeScreenState extends State<HomeScreen> {
             final sessionDate = DateTime(sessionStart.year, sessionStart.month, sessionStart.day);
             
             if (sessionDate.isAtSameMomentAs(todayDate)) {
-              return '${_formatTimeWith24H(sessionStart)} - ${_formatTimeWith24H(sessionEnd, isRangeEnd: true)}';
+              todayRanges.add(
+                '${_formatTimeWith24H(sessionStart)} - ${_formatTimeWith24H(sessionEnd, isRangeEnd: true)}',
+              );
             }
           } catch (e) {
             // Continue to next session
           }
+        }
+
+        if (todayRanges.isNotEmpty) {
+          if (todayRanges.length == 1) return todayRanges.first;
+          return '${todayRanges.length} sessions\n${todayRanges.join('\n')}';
         }
       }
       
@@ -321,8 +402,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return 2;
   }
 
-  String _getGreeting() {
-    final greetings = ['Good Morning', 'Good Afternoon', 'Good Evening'];
+  String _getGreeting(AppLocalizations l10n) {
+    final greetings = [l10n.greetingMorning, l10n.greetingAfternoon, l10n.greetingEvening];
     return greetings[_getGreetingTime()];
   }
 
@@ -340,8 +421,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // 🆕 Format weekdays for display
-  String _formatWeekdays(dynamic weekdays) {
-    if (weekdays == null) return 'Not set';
+  String _formatWeekdays(dynamic weekdays, AppLocalizations l10n) {
+    if (weekdays == null) return l10n.notSet;
     
     final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     List<int> daysList = [];
@@ -350,27 +431,26 @@ class _HomeScreenState extends State<HomeScreen> {
       daysList = weekdays.cast<int>();
     }
     
-    if (daysList.isEmpty) return 'Not set';
+    if (daysList.isEmpty) return l10n.notSet;
     
     daysList.sort();
     return daysList.map((d) => days[d - 1]).join(', ');
   }
 
-  String _formatScheduleSubtitle(Map<String, dynamic> schedule) {
-    String weekdaysStr = _formatWeekdays(schedule['weekdays']);
-    
+  String _formatScheduleSubtitle(Map<String, dynamic> schedule, AppLocalizations l10n) {
+    String weekdaysStr = _formatWeekdays(schedule['weekdays'], l10n);
+
     final scheduleEndDate = schedule['scheduleEndDate'];
     if (scheduleEndDate != null) {
       try {
         final endDate = DateTime.parse(scheduleEndDate);
         final formattedDate = DateFormat('MMM d, y').format(endDate);
-        return '$weekdaysStr • Until $formattedDate';
+        return '$weekdaysStr • ${l10n.until} $formattedDate';
       } catch (e) {
-        // If parsing fails, just return weekdays
         return weekdaysStr;
       }
     }
-    
+
     return weekdaysStr;
   }
 
@@ -465,18 +545,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return breakdown;
   }
 
-  String _buildCoachMessage() {
+  String _buildCoachMessage(AppLocalizations l10n) {
     if (_todayTasks.isEmpty) {
-      return 'No tasks yet. Add your first item to generate a smarter plan.';
+      return l10n.coachNoTasks;
     }
     if (_todayTasks.any((task) => task['difficulty'] == 'Hard')) {
       final hardTask = _todayTasks.firstWhere((task) => task['difficulty'] == 'Hard');
-      return 'Start with ${hardTask['name']}. It is the highest-effort item in your plan today.';
+      return l10n.coachStartWith(hardTask['name'] ?? '');
     }
     if (_completedTasksCount == _todayTasks.length) {
-      return 'Everything planned for today is completed. Keep the momentum going.';
+      return l10n.coachAllDone;
     }
-    return 'You have ${_todayTasks.length - _completedTasksCount} items left today. Finish the next one before switching context.';
+    return l10n.coachItemsLeft(_todayTasks.length - _completedTasksCount);
   }
 
   Widget _buildOverviewMetric({
@@ -541,7 +621,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildOverviewCard() {
+  Widget _buildOverviewCard(AppLocalizations l10n) {
     final completionRatio = _todayTasks.isEmpty
         ? 0.0
         : _completedTasksCount / _todayTasks.length;
@@ -586,9 +666,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'TODAY OVERVIEW',
-                      style: TextStyle(
+                    Text(
+                      l10n.todayOverview,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
@@ -597,7 +677,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _buildCoachMessage(),
+                      _buildCoachMessage(l10n),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -623,9 +703,9 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Row(
                   children: [
-                    const Text(
-                      'Plan completion',
-                      style: TextStyle(
+                    Text(
+                      l10n.planCompletion,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -633,7 +713,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const Spacer(),
                     Text(
-                      '$_completedTasksCount/${_todayTasks.length} done · $completionPercent%',
+                      '$_completedTasksCount/${_todayTasks.length} ${l10n.done} · $completionPercent%',
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.88),
                         fontSize: 12,
@@ -660,21 +740,21 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildOverviewMetric(
                 icon: Icons.task_alt_rounded,
-                label: 'Tasks today',
+                label: l10n.tasksToday,
                 value: '${_todayTasks.length}',
                 tone: const Color(0xFFFFE3D7),
               ),
               const SizedBox(width: 10),
               _buildOverviewMetric(
                 icon: Icons.local_fire_department_rounded,
-                label: 'Day streak',
+                label: l10n.dayStreak,
                 value: '$_dayStreak',
                 tone: const Color(0xFFFFD5D5),
               ),
               const SizedBox(width: 10),
               _buildOverviewMetric(
                 icon: Icons.schedule_rounded,
-                label: 'Focus hours',
+                label: l10n.focusHours,
                 value: '${_totalFocusHours}h',
                 tone: const Color(0xFFFFE9D2),
               ),
@@ -685,7 +765,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSubjectAnalysisCard() {
+  Widget _buildSubjectAnalysisCard(AppLocalizations l10n) {
     final breakdown = _getSubjectBreakdown();
     if (breakdown.isEmpty) {
       return const SizedBox.shrink();
@@ -707,9 +787,9 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "TODAY'S SUBJECT BALANCE",
-            style: TextStyle(
+          Text(
+            l10n.todaySubjectBalance,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
               color: AppColors.textSecondary,
@@ -769,7 +849,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildHomeContent() {
+  Widget _buildHomeContent(AppLocalizations l10n) {
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
@@ -781,7 +861,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _getGreeting(),
+                  _getGreeting(l10n),
                   style: const TextStyle(
                     fontSize: 16,
                     color: AppColors.textSecondary,
@@ -800,12 +880,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: AppSpacing.lg),
-            _buildOverviewCard(),
+            _buildOverviewCard(l10n),
 
             if (_todayTasks.isNotEmpty)
               const SizedBox(height: AppSpacing.md),
             if (_todayTasks.isNotEmpty)
-              _buildSubjectAnalysisCard(),
+              _buildSubjectAnalysisCard(l10n),
             
             // Performance Tracking Card - Temporarily hidden
             // const SizedBox(height: AppSpacing.lg),
@@ -817,9 +897,9 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  "Today's Schedule",
-                  style: TextStyle(
+                Text(
+                  l10n.todaySchedule,
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
@@ -828,12 +908,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextButton(
                   onPressed: () {
                     setState(() {
-                      _currentIndex = 2; // Navigate to calendar
+                      _currentIndex = 2;
                     });
                   },
-                  child: const Text(
-                    'View all',
-                    style: TextStyle(
+                  child: Text(
+                    l10n.viewAll,
+                    style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 14,
                     ),
@@ -867,8 +947,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      'No tasks yet',
-                      style: TextStyle(
+                      l10n.noTasksYet,
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textSecondary,
@@ -876,7 +956,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Tap the + button to add your first task',
+                      l10n.addFirstTask,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
@@ -888,26 +968,139 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ] else ...[
               for (int i = 0; i < _todayTasks.length && i < 5; i++) ...[
-                (() {
-                  final subject = _getSubjectLabel(_todayTasks[i]);
-                  final subjectColor = _getSubjectColor(_todayTasks[i]);
-                  return StatusTaskCard(
-                    taskId: _todayTasks[i]['id'] ?? '',
-                    title: _todayTasks[i]['name'] ?? 'Untitled Task',
-                    timeSlot: _formatTimeRange(_todayTasks[i]),
-                    deadlineText: _formatDeadlineLabel(_todayTasks[i]),
-                    duration: '${_todayTasks[i]['estimatedTime'] ?? 1}h',
-                    difficulty: _todayTasks[i]['difficulty'] ?? 'Medium',
-                    category: _todayTasks[i]['category'] ?? 'General',
-                    subject: subject,
-                    accentColor: subjectColor,
-                    status: _getTaskStatus(_todayTasks[i]['id'] ?? ''),
-                    onStatusChanged: _handleTaskStatusChange,
-                    onDelete: () async {
-                      await _storage.deleteCustomTask(_todayTasks[i]['id'] ?? '');
-                      _loadData();
-                    },
-                  );
+                ...(() {
+                  final task = _todayTasks[i];
+                  final taskType = (task['taskType'] ?? '').toString();
+                  if (taskType == 'Task') {
+                    final sessions = task['sessions'];
+                    if (sessions is List && sessions.isNotEmpty) {
+                      final today = DateTime.now();
+                      final todayDate =
+                          DateTime(today.year, today.month, today.day);
+                      final widgets = <Widget>[];
+                      for (int si = 0; si < sessions.length; si++) {
+                        final s = sessions[si];
+                        if (s is! Map) continue;
+                        try {
+                          final st = DateTime.parse((s['startTime'] ?? '').toString());
+                          final en = DateTime.parse((s['endTime'] ?? '').toString());
+                          final sd = DateTime(st.year, st.month, st.day);
+                          if (!sd.isAtSameMomentAs(todayDate)) continue;
+                          final subject = _getSubjectLabel(task);
+                          final subjectColor = _getSubjectColor(task);
+                          final compositeId =
+                              '${(task['id'] ?? '').toString()}::$si';
+                          final durMin =
+                              (s['duration'] is int ? s['duration'] as int : null) ??
+                                  en.difference(st).inMinutes;
+                          final durText = durMin >= 60
+                              ? '${(durMin / 60).floor()}h'
+                              : '${durMin}m';
+                          widgets.add(
+                            StatusTaskCard(
+                              taskId: compositeId,
+                              title: '${task['name'] ?? 'Untitled Task'} • Part ${si + 1}/${sessions.length}',
+                              timeSlot:
+                                  '${_formatTimeWith24H(st)} - ${_formatTimeWith24H(en, isRangeEnd: true)}',
+                              deadlineText: _formatDeadlineLabel(task),
+                              duration: durText,
+                              difficulty: task['difficulty'] ?? 'Medium',
+                              category: task['category'] ?? 'General',
+                              subject: subject,
+                              accentColor: subjectColor,
+                              status: _getTaskStatus(compositeId),
+                              onStatusChanged: _handleTaskStatusChange,
+                              onDelete: () async {
+                                await _storage.deleteCustomTask(
+                                    (task['id'] ?? '').toString());
+                                _loadData();
+                              },
+                            ),
+                          );
+                        } catch (_) {
+                          // ignore bad session parse
+                        }
+                      }
+                      if (widgets.isNotEmpty) return widgets;
+                    }
+                  }
+                  if (taskType == 'Activity') {
+                    final sessions = task['sessions'];
+                    if (sessions is List && sessions.isNotEmpty) {
+                      final today = DateTime.now();
+                      final todayDate =
+                          DateTime(today.year, today.month, today.day);
+                      final widgets = <Widget>[];
+                      for (int si = 0; si < sessions.length; si++) {
+                        final s = sessions[si];
+                        if (s is! Map) continue;
+                        try {
+                          final st = DateTime.parse((s['startTime'] ?? '').toString());
+                          final en = DateTime.parse((s['endTime'] ?? '').toString());
+                          final sd = DateTime(st.year, st.month, st.day);
+                          if (!sd.isAtSameMomentAs(todayDate)) continue;
+                          final subject = _getSubjectLabel(task);
+                          final subjectColor = _getSubjectColor(task);
+                          final compositeId =
+                              '${(task['id'] ?? '').toString()}::$si';
+                          final durMin =
+                              (s['duration'] is int ? s['duration'] as int : null) ??
+                                  en.difference(st).inMinutes;
+                          final durText = durMin >= 60
+                              ? '${(durMin / 60).floor()}h'
+                              : '${durMin}m';
+                          widgets.add(
+                            StatusTaskCard(
+                              taskId: compositeId,
+                              title:
+                                  '${task['name'] ?? 'Untitled Activity'} • Session ${si + 1}/${sessions.length}',
+                              timeSlot:
+                                  '${_formatTimeWith24H(st)} - ${_formatTimeWith24H(en, isRangeEnd: true)}',
+                              deadlineText: _formatDeadlineLabel(task),
+                              duration: durText,
+                              difficulty: task['difficulty'] ?? 'Medium',
+                              category: 'Activity',
+                              subject: subject,
+                              accentColor: subjectColor,
+                              status: _getTaskStatus(compositeId),
+                              onStatusChanged: _handleTaskStatusChange,
+                              onDelete: () async {
+                                await _storage.deleteCustomTask(
+                                    (task['id'] ?? '').toString());
+                                _loadData();
+                              },
+                            ),
+                          );
+                        } catch (_) {
+                          // ignore bad session parse
+                        }
+                      }
+                      if (widgets.isNotEmpty) return widgets;
+                    }
+                  }
+
+                  // Default: render the task as-is.
+                  final subject = _getSubjectLabel(task);
+                  final subjectColor = _getSubjectColor(task);
+                  return [
+                    StatusTaskCard(
+                      taskId: task['id'] ?? '',
+                      title: task['name'] ?? 'Untitled Task',
+                      timeSlot: _formatTimeRange(task),
+                      deadlineText: _formatDeadlineLabel(task),
+                      duration: '${task['estimatedTime'] ?? 1}h',
+                      difficulty: task['difficulty'] ?? 'Medium',
+                      category: task['category'] ?? 'General',
+                      subject: subject,
+                      accentColor: subjectColor,
+                      status: _getTaskStatus(task['id'] ?? ''),
+                      onStatusChanged: _handleTaskStatusChange,
+                      onDelete: () async {
+                        await _storage.deleteCustomTask(task['id'] ?? '');
+                        _loadData();
+                      },
+                    ),
+                  ];
                 })(),
               ],
             ],
@@ -940,9 +1133,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Recurring Schedules',
-                        style: TextStyle(
+                      Text(
+                        l10n.recurringSchedules,
+                        style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: AppColors.textPrimary,
@@ -951,7 +1144,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Your weekly routines',
+                        l10n.weeklyRoutines,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
@@ -1001,8 +1194,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'No recurring schedules',
-                      style: TextStyle(
+                      l10n.noRecurringSchedules,
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary,
@@ -1010,7 +1203,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Add schedules that repeat weekly',
+                      l10n.addWeeklySchedules,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
@@ -1025,7 +1218,7 @@ class _HomeScreenState extends State<HomeScreen> {
               for (var task in _todayTasks.where(_isRecurringType)) ...[
                 PriorityTaskCard(
                   title: task['name'] ?? 'Untitled Schedule',
-                  subtitle: _formatScheduleSubtitle(task),
+                  subtitle: _formatScheduleSubtitle(task, l10n),
                   bestSlot: _formatTimeRange(task),
                   subject: _getSubjectLabel(task),
                   accentColor: _getSubjectColor(task),
@@ -1107,9 +1300,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final screens = [
-      _buildHomeContent(),
-      const TasksScreen(),
+      _buildHomeContent(l10n),
+      const ChatPlannerScreen(),
       const CalendarScreen(),
       const ProfileScreen(),
     ];
@@ -1206,11 +1400,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildNavItem(Icons.home_rounded, 'Home', 0),
-                        _buildNavItem(Icons.task_alt, 'Tasks', 1),
-                        const SizedBox(width: 48), // Space for FAB
-                        _buildNavItem(Icons.calendar_month, 'Calendar', 2),
-                        _buildNavItem(Icons.person, 'Profile', 3),
+                        _buildNavItem(Icons.home_rounded, l10n.navHome, 0),
+                        _buildNavItem(Icons.chat_bubble_outline_rounded, l10n.navChat, 1),
+                        const SizedBox(width: 48),
+                        _buildNavItem(Icons.calendar_month, l10n.navCalendar, 2),
+                        _buildNavItem(Icons.person, l10n.navProfile, 3),
                       ],
                     ),
                     // Animated dot indicator

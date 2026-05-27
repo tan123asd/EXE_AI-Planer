@@ -157,9 +157,69 @@ class StorageService {
     await saveCustomTasks(tasks);
   }
 
+  Future<void> setTaskSessionCompleted(
+    String taskId, {
+    required int sessionIndex,
+    required bool isCompleted,
+  }) async {
+    final tasks = getCustomTasks();
+    final taskIndex = tasks.indexWhere((t) => (t['id'] ?? '').toString() == taskId);
+    if (taskIndex == -1) return;
+
+    final task = Map<String, dynamic>.from(tasks[taskIndex]);
+    final sessionsAny = task['sessions'];
+    if (sessionsAny is! List) return;
+    if (sessionIndex < 0 || sessionIndex >= sessionsAny.length) return;
+
+    final sessions = sessionsAny.map((e) => e is Map ? Map<String, dynamic>.from(e) : e).toList();
+    final s = sessions[sessionIndex];
+    if (s is! Map<String, dynamic>) return;
+    s['isCompleted'] = isCompleted;
+    sessions[sessionIndex] = s;
+    task['sessions'] = sessions;
+
+    // If a Task has sessions, consider it completed only when all sessions are completed.
+    final allDone = sessions
+        .whereType<Map<String, dynamic>>()
+        .isNotEmpty &&
+        sessions
+            .whereType<Map<String, dynamic>>()
+            .every((m) => m['isCompleted'] == true);
+    task['isCompleted'] = allDone;
+
+    tasks[taskIndex] = task;
+    await saveCustomTasks(tasks);
+  }
+
   Future<void> deleteCustomTask(String taskId) async {
     final tasks = getCustomTasks();
     tasks.removeWhere((task) => task['id'] == taskId);
+    await saveCustomTasks(tasks);
+  }
+
+  /// Xóa 1 session khỏi task. Nếu không còn session nào thì xóa luôn task cha.
+  Future<void> deleteTaskSession(String taskId, int sessionIndex) async {
+    final tasks = getCustomTasks();
+    final taskIndex = tasks.indexWhere((t) => (t['id'] ?? '').toString() == taskId);
+    if (taskIndex == -1) return;
+
+    final task = Map<String, dynamic>.from(tasks[taskIndex]);
+    final sessionsAny = task['sessions'];
+    if (sessionsAny is! List) return;
+
+    final sessions = sessionsAny
+        .map((e) => e is Map ? Map<String, dynamic>.from(e) : e)
+        .toList();
+    if (sessionIndex < 0 || sessionIndex >= sessions.length) return;
+
+    sessions.removeAt(sessionIndex);
+
+    if (sessions.isEmpty) {
+      tasks.removeAt(taskIndex);
+    } else {
+      task['sessions'] = sessions;
+      tasks[taskIndex] = task;
+    }
     await saveCustomTasks(tasks);
   }
 
@@ -357,118 +417,170 @@ class StorageService {
     return jsonDecode(settingsJson);
   }
   
+  // ==================== PRODUCTIVITY HOURS ====================
+
+  static const String _productivityHoursKey = 'productivity_hours';
+
+  Future<void> saveProductivityHours(
+      List<Map<String, dynamic>> windows) async {
+    await _prefs?.setString(_productivityHoursKey, jsonEncode(windows));
+  }
+
+  List<Map<String, dynamic>> getProductivityHours() {
+    final raw = _prefs?.getString(_productivityHoursKey);
+    if (raw == null || raw.isEmpty) {
+      // Sensible defaults: 8–11 AM and 7–10 PM
+      return [
+        {'startHour': 8, 'endHour': 11},
+        {'startHour': 19, 'endHour': 22},
+      ];
+    }
+    final decoded = jsonDecode(raw) as List<dynamic>;
+    return decoded.cast<Map<String, dynamic>>();
+  }
+
+  // Returns all occupied time ranges in [from, to] from all sources.
+  // Each entry: {startTime, endTime, type: 'fixed'|'deadline'|'activity'}
+  List<Map<String, dynamic>> getOccupiedTimeRanges(
+      DateTime from, DateTime to) {
+    final results = <Map<String, dynamic>>[];
+    final tasks = getCustomTasks();
+
+    for (final task in tasks) {
+      final taskType = task['taskType'] as String? ?? '';
+
+      if (taskType == 'Schedules') {
+        // Recurring fixed schedule — expand occurrences within [from, to]
+        final weekdays = task['weekdays'];
+        final startStr = task['startTime'] as String?;
+        final endStr = task['endTime'] as String?;
+        if (weekdays == null || startStr == null || endStr == null) continue;
+
+        final scheduleWeekdays = (weekdays as List).cast<int>();
+        final startParts = startStr.split(':');
+        final endParts = endStr.split(':');
+        if (startParts.length < 2 || endParts.length < 2) continue;
+
+        final startH = int.tryParse(startParts[0]) ?? 0;
+        final startM = int.tryParse(startParts[1]) ?? 0;
+        final endH = int.tryParse(endParts[0]) ?? 0;
+        final endM = int.tryParse(endParts[1]) ?? 0;
+
+        DateTime day = DateTime(from.year, from.month, from.day);
+        while (!day.isAfter(to)) {
+          if (scheduleWeekdays.contains(day.weekday)) {
+            final s = DateTime(day.year, day.month, day.day, startH, startM);
+            final e = DateTime(day.year, day.month, day.day, endH, endM);
+            if (e.isAfter(s) && s.isBefore(to) && e.isAfter(from)) {
+              results.add({
+                'startTime': s.toIso8601String(),
+                'endTime': e.toIso8601String(),
+                'type': 'fixed',
+              });
+            }
+          }
+          day = day.add(const Duration(days: 1));
+        }
+      } else if (taskType == 'Task') {
+        // Scheduled task sessions
+        final sessions = task['sessions'];
+        if (sessions is List) {
+          for (final s in sessions) {
+            if (s is! Map) continue;
+            final sStart = DateTime.tryParse(s['startTime'] as String? ?? '');
+            final sEnd = DateTime.tryParse(s['endTime'] as String? ?? '');
+            if (sStart == null || sEnd == null) continue;
+            if (sStart.isBefore(to) && sEnd.isAfter(from)) {
+              results.add({
+                'startTime': sStart.toIso8601String(),
+                'endTime': sEnd.toIso8601String(),
+                'type': 'deadline',
+              });
+            }
+          }
+        }
+      } else if (taskType == 'Activity') {
+        // Scheduled activity sessions
+        final sessions = task['sessions'];
+        if (sessions is List) {
+          for (final s in sessions) {
+            if (s is! Map) continue;
+            final sStart = DateTime.tryParse(s['startTime'] as String? ?? '');
+            final sEnd = DateTime.tryParse(s['endTime'] as String? ?? '');
+            if (sStart == null || sEnd == null) continue;
+            if (sStart.isBefore(to) && sEnd.isAfter(from)) {
+              results.add({
+                'startTime': sStart.toIso8601String(),
+                'endTime': sEnd.toIso8601String(),
+                'type': 'activity',
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return results;
+  }
+
   // ==================== SCHEDULE CONFLICT DETECTION ====================
   
   // Check if a time slot conflicts with existing schedule
   bool hasScheduleConflict(DateTime startTime, DateTime endTime) {
-    // Check conflicts with existing schedule items
+    // Check conflicts with legacy generated schedule items
     final schedule = getGeneratedSchedule();
-    
     for (var item in schedule) {
       final itemStart = DateTime.tryParse(item['startTime'] ?? '');
       final itemEnd = DateTime.tryParse(item['endTime'] ?? '');
-      
       if (itemStart != null && itemEnd != null) {
-        // Check overlap
         if (startTime.isBefore(itemEnd) && endTime.isAfter(itemStart)) {
           return true;
         }
       }
     }
-    
-    // 🔧 Check conflicts with recurring Schedules (fixed time slots)
+
     final tasks = getCustomTasks();
-    
     for (var task in tasks) {
-      // 🔧 NEW: Check recurring schedules (fixed time slots only)
+      // Check recurring Schedules (fixed weekday pattern, stored as HH:MM strings)
       if (task['taskType'] == 'Schedules') {
         final weekdays = task['weekdays'];
         final startTimeStr = task['startTime'];
         final endTimeStr = task['endTime'];
-        
         if (weekdays != null && startTimeStr != null && endTimeStr != null) {
           List<int> scheduleWeekdays = [];
-          if (weekdays is List) {
-            scheduleWeekdays = weekdays.cast<int>();
-          }
-          
-          // Check if proposed time falls on one of the recurring days
+          if (weekdays is List) scheduleWeekdays = weekdays.cast<int>();
           if (scheduleWeekdays.contains(startTime.weekday)) {
-            // Parse schedule time (format: "HH:MM")
             final startParts = startTimeStr.toString().split(':');
             final endParts = endTimeStr.toString().split(':');
-            
             if (startParts.length == 2 && endParts.length == 2) {
-              final scheduleStart = DateTime(
-                startTime.year,
-                startTime.month,
-                startTime.day,
-                int.parse(startParts[0]),
-                int.parse(startParts[1]),
-              );
-              
-              final scheduleEnd = DateTime(
-                startTime.year,
-                startTime.month,
-                startTime.day,
-                int.parse(endParts[0]),
-                int.parse(endParts[1]),
-              );
-              
-              // Check time overlap on that day
+              final scheduleStart = DateTime(startTime.year, startTime.month, startTime.day,
+                  int.parse(startParts[0]), int.parse(startParts[1]));
+              final scheduleEnd = DateTime(startTime.year, startTime.month, startTime.day,
+                  int.parse(endParts[0]), int.parse(endParts[1]));
               if (startTime.isBefore(scheduleEnd) && endTime.isAfter(scheduleStart)) {
-                return true; // Conflicts with recurring schedule
+                return true;
               }
             }
           }
         }
       }
-      
-      // 🔧 Check conflicts with Task type (with deadline)
-      if (task['taskType'] == 'Task' && task['deadline'] != null) {
-        final taskDeadline = DateTime.tryParse(task['deadline']);
-        
-        if (taskDeadline != null) {
-          // Get estimated time (stored as int hours or as string)
-          int durationMinutes = 60; // Default 1 hour
-          
-          if (task['estimatedTime'] != null) {
-            if (task['estimatedTime'] is int) {
-              durationMinutes = (task['estimatedTime'] as int) * 60;
-            } else if (task['estimatedTime'] is String) {
-              final estimatedTime = task['estimatedTime'] as String;
-              if (estimatedTime.contains('30 min')) {
-                durationMinutes = 60;
-              } else if (estimatedTime.contains('1 hour')) {
-                durationMinutes = 60;
-              } else if (estimatedTime.contains('2 hours')) {
-                durationMinutes = 120;
-              } else if (estimatedTime.contains('3 hours')) {
-                durationMinutes = 180;
-              } else if (estimatedTime.contains('4 hours')) {
-                durationMinutes = 240;
-              } else if (estimatedTime.contains('5+ hours')) {
-                durationMinutes = 300;
-              }
-            }
-          }
-          
-          // 🔧 Check if task has specific time or just date
-          if (taskDeadline.hour != 0 || taskDeadline.minute != 0) {
-            // Task has specific time - deadline is the START time
-            final taskStart = taskDeadline;
-            final taskEnd = taskDeadline.add(Duration(minutes: durationMinutes));
-            
-            // Check overlap
-            if (startTime.isBefore(taskEnd) && endTime.isAfter(taskStart)) {
+
+      // Check all sessions in Task and Activity items (both store ISO8601 startTime/endTime)
+      final sessions = task['sessions'];
+      if (sessions is List) {
+        for (final s in sessions) {
+          if (s is! Map) continue;
+          final sessionStart = DateTime.tryParse(s['startTime'] as String? ?? '');
+          final sessionEnd = DateTime.tryParse(s['endTime'] as String? ?? '');
+          if (sessionStart != null && sessionEnd != null) {
+            if (startTime.isBefore(sessionEnd) && endTime.isAfter(sessionStart)) {
               return true;
             }
           }
-          // If task only has date (00:00), we don't know exact time, skip conflict check
         }
       }
     }
-    
+
     return false;
   }
   
@@ -537,10 +649,53 @@ class StorageService {
     return schedule.where((item) {
       final itemStart = DateTime.tryParse(item['startTime'] ?? '');
       if (itemStart == null) return false;
-      
+
       return itemStart.year == day.year &&
              itemStart.month == day.month &&
              itemStart.day == day.day;
     }).toList();
+  }
+
+  // ─── Chat Planner Persistence ────────────────────────────────────────────
+
+  static const String _chatHistoryKey = 'chat_history';
+  static const String _chatContextKey = 'chat_context';
+  static const int _maxChatMessages = 100;
+
+  Future<void> saveChatHistory(List<Map<String, dynamic>> messages) async {
+    final toSave = messages.length > _maxChatMessages
+        ? messages.sublist(messages.length - _maxChatMessages)
+        : messages;
+    await _prefs?.setString(_chatHistoryKey, jsonEncode(toSave));
+  }
+
+  List<Map<String, dynamic>> loadChatHistory() {
+    final raw = _prefs?.getString(_chatHistoryKey);
+    if (raw == null) return [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveConversationContext(Map<String, dynamic> context) async {
+    await _prefs?.setString(_chatContextKey, jsonEncode(context));
+  }
+
+  Map<String, dynamic>? loadConversationContext() {
+    final raw = _prefs?.getString(_chatContextKey);
+    if (raw == null) return null;
+    try {
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> clearChatHistory() async {
+    await _prefs?.remove(_chatHistoryKey);
+    await _prefs?.remove(_chatContextKey);
   }
 }

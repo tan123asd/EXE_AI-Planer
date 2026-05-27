@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "88398717416",
+    "project_id": "chitan160204",
+    "storage_bucket": "chitan160204.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:88398717416:android:5e8a291152ecf174af045d",
+        "android_client_info": {
+          "package_name": "com.exe.aiplanner"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDneLEcFVl5k7CAO0O9L-dw6X5lU6C07Ko"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

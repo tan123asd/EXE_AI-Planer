@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ai_study_planner/l10n/app_localizations.dart';
 import '../models/schedule_item.dart';
 import '../utils/constants.dart';
 import '../widgets/schedule_card.dart';
@@ -149,8 +150,8 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'AI Generated Schedule',
+        title: Text(
+          AppLocalizations.of(context)!.aiScheduleTitle,
           style: AppTextStyles.heading2,
         ),
       ),
@@ -175,17 +176,17 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
                     borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
                   child: Row(
-                    children: const [
-                      Icon(
+                    children: [
+                      const Icon(
                         Icons.auto_awesome,
                         color: Colors.white,
                         size: 32,
                       ),
-                      SizedBox(width: AppSpacing.md),
+                      const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Text(
-                          'Your personalized schedule has been generated based on your tasks and preferences.',
-                          style: TextStyle(
+                          AppLocalizations.of(context)!.aiScheduleDesc,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 14,
                           ),
@@ -236,9 +237,9 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
                         onPressed: () async {
                           await _loadData();
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Schedule refreshed!'),
-                              duration: Duration(seconds: 2),
+                            SnackBar(
+                              content: Text(AppLocalizations.of(context)!.scheduleRefreshed),
+                              duration: const Duration(seconds: 2),
                             ),
                           );
                         },
@@ -253,7 +254,7 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
                           ),
                           padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                         ),
-                        child: const Text('Regenerate'),
+                        child: Text(AppLocalizations.of(context)!.regenerate),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
@@ -284,10 +285,10 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
                           
                           // Show success message
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Schedule and task saved successfully!'),
+                            SnackBar(
+                              content: Text(AppLocalizations.of(context)!.scheduleSaved),
                               backgroundColor: AppColors.success,
-                              duration: Duration(seconds: 2),
+                              duration: const Duration(seconds: 2),
                             ),
                           );
                           
@@ -303,7 +304,7 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
                           padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                           elevation: 0,
                         ),
-                        child: const Text('Save Schedule'),
+                        child: Text(AppLocalizations.of(context)!.saveSchedule),
                       ),
                     ),
                   ],

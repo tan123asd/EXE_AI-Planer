@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ai_study_planner/l10n/app_localizations.dart';
 import '../utils/constants.dart';
 import 'daily_check_screen.dart';
 
@@ -7,6 +8,7 @@ class SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: AppColors.primary,
       body: SafeArea(
@@ -25,9 +27,7 @@ class SplashScreen extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        // Top spacing
                         const SizedBox(height: 60),
-                        // App Logo
                         Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
@@ -48,29 +48,25 @@ class SplashScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        // App Name
-                        const Text(
-                          'AI Study Planner',
-                          style: TextStyle(
+                        Text(
+                          l10n.appTitle,
+                          style: const TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
                         const SizedBox(height: 12),
-                        // Tagline
-                        const Text(
-                          'Balance Study, Life, and Growth',
-                          style: TextStyle(
+                        Text(
+                          l10n.tagline,
+                          style: const TextStyle(
                             fontSize: 15,
                             color: Colors.white,
                             fontWeight: FontWeight.w300,
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        // Flexible spacer
                         const Spacer(),
-                        // Get Started Button
                         Padding(
                           padding: const EdgeInsets.only(bottom: 24),
                           child: SizedBox(
@@ -80,7 +76,8 @@ class SplashScreen extends StatelessWidget {
                               onPressed: () {
                                 Navigator.of(context).pushReplacement(
                                   MaterialPageRoute(
-                                    builder: (context) => const DailyCheckScreen(),
+                                    builder: (context) =>
+                                        const DailyCheckScreen(),
                                   ),
                                 );
                               },
@@ -88,13 +85,14 @@ class SplashScreen extends StatelessWidget {
                                 backgroundColor: Colors.white,
                                 foregroundColor: AppColors.primary,
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(AppRadius.md),
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.md),
                                 ),
                                 elevation: 0,
                               ),
-                              child: const Text(
-                                'Get Started',
-                                style: TextStyle(
+                              child: Text(
+                                l10n.getStarted,
+                                style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w600,
                                 ),

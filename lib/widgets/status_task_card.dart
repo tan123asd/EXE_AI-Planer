@@ -425,28 +425,30 @@ class _StatusTaskCardState extends State<StatusTaskCard>
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               // Difficulty badge
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.7),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: _getDifficultyColor().withOpacity(0.25),
+                              if (widget.category.toLowerCase() != 'activity') ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.7),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: _getDifficultyColor().withOpacity(0.25),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    widget.difficulty,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: _getDifficultyColor(),
+                                    ),
                                   ),
                                 ),
-                                child: Text(
-                                  widget.difficulty,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: _getDifficultyColor(),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
+                                const SizedBox(height: 8),
+                              ],
                               
                               // Status indicator
                               if (isCompleted)
