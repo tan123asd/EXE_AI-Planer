@@ -3,6 +3,8 @@ import 'package:ai_study_planner/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
+import '../services/auth_service.dart';
+import '../screens/login_screen.dart';
 import '../models/scheduler_models.dart';
 import '../providers/language_provider.dart';
 
@@ -278,11 +280,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Text(l10n.cancel),
                         ),
                         TextButton(
-                          onPressed: () {
+                          onPressed: () async {
                             Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(l10n.loggedOut)),
-                            );
+                            try {
+                              final authService = AuthService();
+                              await authService.signOut();
+                              if (mounted) {
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(
+                                    builder: (context) => const LoginScreen(),
+                                  ),
+                                  (route) => false,
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error logging out: $e'),
+                                    backgroundColor: AppColors.danger,
+                                  ),
+                                );
+                              }
+                            }
                           },
                           child: Text(
                             l10n.logout,
