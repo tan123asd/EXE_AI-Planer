@@ -173,6 +173,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final langProvider = context.watch<LanguageProvider>();
     final currentLang =
         langProvider.locale.languageCode == 'vi' ? 'Tiếng Việt' : 'English';
+    final photoUrl = _storage.getUserPhotoUrl();
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -185,11 +186,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             CircleAvatar(
               radius: 50,
               backgroundColor: AppColors.primary.withOpacity(0.1),
-              child: const Icon(
-                Icons.person,
-                size: 50,
-                color: AppColors.primary,
-              ),
+              backgroundImage:
+                  photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+              child: photoUrl.isEmpty
+                  ? const Icon(
+                      Icons.person,
+                      size: 50,
+                      color: AppColors.primary,
+                    )
+                  : null,
             ),
             const SizedBox(height: AppSpacing.md),
 

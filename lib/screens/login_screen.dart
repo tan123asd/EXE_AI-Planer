@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ai_study_planner/services/auth_service.dart';
+import 'package:ai_study_planner/services/storage_service.dart';
 import 'package:ai_study_planner/utils/constants.dart' as app_constants;
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -13,6 +14,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
+  final StorageService _storageService = StorageService();
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -140,6 +142,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final userCredential = await _authService.signInWithGoogle();
+      final user = userCredential?.user;
+      if (user != null) {
+        final displayName = user.displayName?.trim().isNotEmpty == true
+            ? user.displayName!.trim()
+            : (user.email?.split('@').first ?? 'Student');
+        final email = user.email ?? '';
+        final photoUrl = user.photoURL ?? '';
+
+        await _storageService.saveUserName(displayName);
+        await _storageService.saveUserEmail(email);
+        await _storageService.saveUserPhotoUrl(photoUrl);
+      }
+
       if (userCredential != null && mounted) {
         // Navigate to home screen
         Navigator.of(context).pushReplacementNamed('/home');
