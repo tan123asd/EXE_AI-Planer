@@ -3,8 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:ai_study_planner/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
 import 'screens/home_screen.dart';
-import 'utils/constants.dart';
+import 'screens/login_screen.dart';
 import 'services/storage_service.dart';
 import 'services/user_profile_service.dart';
 import 'providers/theme_provider.dart';
@@ -12,6 +15,11 @@ import 'providers/language_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   await StorageService().init();
   await UserProfileService().init();
@@ -62,7 +70,30 @@ class MyApp extends StatelessWidget {
         Locale('en'),
         Locale('vi'),
       ],
-      home: const HomeScreen(),
+      routes: {
+        '/home': (context) => const HomeScreen(),
+        '/login': (context) => const LoginScreen(),
+      },
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          // While checking auth state
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+
+          // If user is logged in, show HomeScreen, otherwise show LoginScreen
+          if (snapshot.hasData && snapshot.data != null) {
+            return const HomeScreen();
+          } else {
+            return const LoginScreen();
+          }
+        },
+      ),
     );
   }
 }

@@ -30,9 +30,9 @@ class _HomeScreenState extends State<HomeScreen> {
   
   // Current tasks to display
   List<Map<String, dynamic>> _todayTasks = [];
-  int _totalFocusHours = 0;
   int _dayStreak = 7;
   int _completedTasksCount = 0;
+  int _plannedTaskUnitsCount = 0;
 
   bool _isRecurringType(Map<String, dynamic> task) {
     final type = (task['taskType'] ?? '').toString();
@@ -119,13 +119,14 @@ class _HomeScreenState extends State<HomeScreen> {
         return false;
       }).toList();
       
-      // Calculate total focus hours
-      _totalFocusHours = _todayTasks.fold(0, (sum, task) => sum + (task['estimatedTime'] as int? ?? 1));
-      
       // Count completed tasks
-      _completedTasksCount = _todayTasks.where((task) => 
-        _storage.isTaskCompleted(task['id'] ?? '')
-      ).length;
+      _plannedTaskUnitsCount = _todayTasks.fold<int>(0, (sum, task) {
+        return sum + _getTaskPlanUnits(task);
+      });
+
+      _completedTasksCount = _todayTasks.fold<int>(0, (sum, task) {
+        return sum + _getCompletedTaskUnits(task);
+      });
     });
   }
 
@@ -407,6 +408,56 @@ class _HomeScreenState extends State<HomeScreen> {
     return greetings[_getGreetingTime()];
   }
 
+  String _getGreetingName() {
+    final name = _userName.trim();
+    return name.isEmpty ? 'Student' : name;
+  }
+
+  bool _isTaskUnitTracked(Map<String, dynamic> task) {
+    return (task['taskType'] ?? '').toString() == 'Task';
+  }
+
+  int _getTaskPlanUnits(Map<String, dynamic> task) {
+    if (!_isTaskUnitTracked(task)) {
+      return 0;
+    }
+
+    final sessions = task['sessions'];
+    if (sessions is List && sessions.isNotEmpty) {
+      return sessions.whereType<Map>().where((session) => _isSessionToday(session)).length;
+    }
+
+    return 1;
+  }
+
+  int _getCompletedTaskUnits(Map<String, dynamic> task) {
+    if (!_isTaskUnitTracked(task)) {
+      return 0;
+    }
+
+    final sessions = task['sessions'];
+    if (sessions is List && sessions.isNotEmpty) {
+      return sessions
+          .whereType<Map>()
+          .where((session) => _isSessionToday(session) && session['isCompleted'] == true)
+          .length;
+    }
+
+    return _storage.isTaskCompleted(task['id'] ?? '') ? 1 : 0;
+  }
+
+  bool _isSessionToday(Map session) {
+    try {
+      final startTime = DateTime.parse((session['startTime'] ?? '').toString());
+      final now = DateTime.now();
+      return startTime.year == now.year &&
+          startTime.month == now.month &&
+          startTime.day == now.day;
+    } catch (_) {
+      return false;
+    }
+  }
+
   String _mapDifficultyToPriority(String difficulty) {
     switch (difficulty) {
       case 'Hard':
@@ -622,9 +673,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildOverviewCard(AppLocalizations l10n) {
+    final plannedUnits = _plannedTaskUnitsCount <= 0 ? 1 : _plannedTaskUnitsCount;
     final completionRatio = _todayTasks.isEmpty
         ? 0.0
-        : _completedTasksCount / _todayTasks.length;
+      : _completedTasksCount / plannedUnits;
     final completionPercent = (completionRatio * 100).round();
 
     return Container(
@@ -713,7 +765,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const Spacer(),
                     Text(
-                      '$_completedTasksCount/${_todayTasks.length} ${l10n.done} · $completionPercent%',
+                      '$_completedTasksCount/${_plannedTaskUnitsCount} ${l10n.done} · $completionPercent%',
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.88),
                         fontSize: 12,
@@ -750,13 +802,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 label: l10n.dayStreak,
                 value: '$_dayStreak',
                 tone: const Color(0xFFFFD5D5),
-              ),
-              const SizedBox(width: 10),
-              _buildOverviewMetric(
-                icon: Icons.schedule_rounded,
-                label: l10n.focusHours,
-                value: '${_totalFocusHours}h',
-                tone: const Color(0xFFFFE9D2),
               ),
             ],
           ),
@@ -870,7 +915,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _userName,
+                  _getGreetingName(),
                   style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,

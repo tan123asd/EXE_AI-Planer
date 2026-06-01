@@ -7,6 +7,7 @@ class StorageService {
   static const String _inProgressTasksKey = 'in_progress_tasks';
   static const String _userNameKey = 'user_name';
   static const String _userEmailKey = 'user_email';
+  static const String _userPhotoUrlKey = 'user_photo_url';
   static const String _userPhoneKey = 'user_phone';
   static const String _userBioKey = 'user_bio';
   static const String _customTasksKey = 'custom_tasks';
@@ -42,6 +43,14 @@ class StorageService {
 
   String getUserEmail() {
     return _prefs?.getString(_userEmailKey) ?? '';
+  }
+
+  Future<void> saveUserPhotoUrl(String photoUrl) async {
+    await _prefs?.setString(_userPhotoUrlKey, photoUrl);
+  }
+
+  String getUserPhotoUrl() {
+    return _prefs?.getString(_userPhotoUrlKey) ?? '';
   }
 
   Future<void> saveUserPhone(String phone) async {
