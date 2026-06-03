@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:ai_study_planner/l10n/app_localizations.dart';
+import 'package:ai_study_planner/l10n/app_localizations_ext.dart';
 import 'package:provider/provider.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
 import '../services/auth_service.dart';
 import '../screens/login_screen.dart';
+import '../screens/notifications_screen.dart';
+import '../screens/settings_screen.dart';
 import '../models/scheduler_models.dart';
 import '../providers/language_provider.dart';
+import '../widgets/time_picker_12h.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -167,6 +171,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _showAboutDialog(BuildContext context, AppLocalizations l10n) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.xs),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: const Icon(Icons.auto_awesome,
+                  color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(l10n.aboutTitle,
+                  style: AppTextStyles.heading2),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l10n.aboutDescription,
+                style: AppTextStyles.body.copyWith(height: 1.55),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Divider(
+                  color: AppColors.textSecondary.withOpacity(0.2)),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                '${l10n.version} 1.0.0',
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary),
+            child: Text(l10n.close),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -234,13 +296,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               context: context,
               icon: Icons.notifications_outlined,
               title: l10n.notifications,
-              onTap: () {},
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const NotificationsScreen()),
+              ),
             ),
             _buildProfileOption(
               context: context,
               icon: Icons.settings_outlined,
               title: l10n.settings,
-              onTap: () {},
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              ),
             ),
             _buildProfileOption(
               context: context,
@@ -251,15 +320,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             _buildProfileOption(
               context: context,
-              icon: Icons.help_outline,
-              title: l10n.helpSupport,
-              onTap: () {},
-            ),
-            _buildProfileOption(
-              context: context,
               icon: Icons.info_outline,
               title: l10n.about,
-              onTap: () {},
+              onTap: () => _showAboutDialog(context, l10n),
             ),
 
             const SizedBox(height: AppSpacing.lg),
@@ -442,15 +505,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _addProductivityWindow() async {
     final l10n = AppLocalizations.of(context)!;
-    final start = await showTimePicker(
-      context: context,
+    final start = await showTimePicker12h(
+      context,
       initialTime: const TimeOfDay(hour: 8, minute: 0),
       helpText: l10n.selectStartFocus,
     );
     if (start == null || !mounted) return;
 
-    final end = await showTimePicker(
-      context: context,
+    final end = await showTimePicker12h(
+      context,
       initialTime: TimeOfDay(hour: start.hour + 2, minute: 0),
       helpText: l10n.selectEndFocus,
     );

@@ -401,12 +401,20 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
 
   // ── Language detection ────────────────────────────────────────────────────
 
+  // Vietnamese words commonly typed without diacritics that don't overlap with English
+  static final _viWordsPattern = RegExp(
+    r'\b(them|xoa|doi|thuyet|trinh|lich|hoat|dong|hoan|thanh|'
+    r'tuan|ngay|mai|bai|tap|on|thi|ke hoach|cong viec|'
+    r'them task|them hoat dong|hoan thanh|ngay mai|tuan nay|hom nay)\b',
+    caseSensitive: false,
+  );
+
   bool _isVi() {
-    // Check any user message in the session — "3h" or "3/6" are ASCII but the
-    // user is still Vietnamese if they wrote Vietnamese earlier in the chat.
     return _messages
         .where((m) => m.role == MessageRole.user)
-        .any((m) => m.content.runes.any((r) => r > 127));
+        .any((m) =>
+            m.content.runes.any((r) => r > 127) ||
+            _viWordsPattern.hasMatch(m.content));
   }
 
   String _t(String en, String vi) => _isVi() ? vi : en;
@@ -446,11 +454,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
 
   // Deterministic follow-up question — avoids a second API call
   String _buildNextQuestion() {
-    final lastUser = _messages.lastWhere(
-      (m) => m.role == MessageRole.user,
-      orElse: () => _messages.last,
-    );
-    final isVi = lastUser.content.runes.any((r) => r > 127);
+    final isVi = _isVi();
 
     if (_context.goalDescription == null) {
       return isVi

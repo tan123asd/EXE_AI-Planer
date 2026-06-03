@@ -1,7 +1,9 @@
+import 'dart:async' show unawaited;
 import '../models/chat_models.dart';
 import '../models/scheduler_models.dart';
 import '../utils/constants.dart';
 import 'ai_service.dart';
+import 'notification_service.dart';
 import 'scheduler_service.dart';
 import 'storage_service.dart';
 
@@ -119,6 +121,7 @@ class ChatPlannerService {
     };
 
     await _storage.addCustomTask(taskData);
+    unawaited(NotificationService().scheduleAllNotifications());
     return id;
   }
 
@@ -237,8 +240,7 @@ class ChatPlannerService {
         }).toList();
 
     task['sessions'] = [...completedSessions, ...newSessions];
-    tasks[idx] = task;
-    await _storage.saveCustomTasks(tasks);
+    await _storage.updateCustomTask(task);
   }
 
   // ── Delete a task ──────────────────────────────────────────────────────────
@@ -306,7 +308,7 @@ class ChatPlannerService {
 
     final updatedSessions = List<dynamic>.from(sessions)..removeAt(sessionIdx);
     task['sessions'] = updatedSessions;
-    await _storage.saveCustomTasks(tasks);
+    await _storage.updateCustomTask(task);
     return true;
   }
 
@@ -371,7 +373,7 @@ class ChatPlannerService {
     final tasks = _storage.getCustomTasks();
     if (tasks.isEmpty) return 'There are no tasks to delete.';
     final count = tasks.length;
-    await _storage.saveCustomTasks([]);
+    await _storage.deleteAllCustomTasks();
     return 'Deleted $count task(s). Your schedule is now empty.';
   }
 
@@ -416,6 +418,7 @@ class ChatPlannerService {
           'isCompleted': false,
         }],
       });
+      unawaited(NotificationService().scheduleAllNotifications());
       return ('Đã thêm hoạt động "${call.name}" vào ${call.specificStartHour}h-${end.hour}h ngày ${date.day}/${date.month}.', null);
     }
 
@@ -475,6 +478,7 @@ class ChatPlannerService {
       'createdAt': DateTime.now().toIso8601String(),
       'sessions': sessions,
     });
+    unawaited(NotificationService().scheduleAllNotifications());
 
     final conflictNote = conflicts.isNotEmpty ? '\nBỏ qua do xung đột: ${conflicts.join(', ')}' : '';
     return ('Đã thêm hoạt động "${call.name}" vào ${call.specificStartHour}h — ${sessions.length} buổi.$conflictNote', null);
@@ -531,6 +535,7 @@ class ChatPlannerService {
       'createdAt': DateTime.now().toIso8601String(),
       'sessions': sessions,
     });
+    unawaited(NotificationService().scheduleAllNotifications());
     return 'Đã lưu hoạt động "$name" — ${sessions.length} buổi.';
   }
 
@@ -558,8 +563,7 @@ class ChatPlannerService {
     }).toList();
 
     task['sessions'] = shifted;
-    tasks[idx] = task;
-    await _storage.saveCustomTasks(tasks);
+    await _storage.updateCustomTask(task);
 
     final actName = task['name'] as String? ?? name;
     final dir = daysOffset > 0 ? 'tới $daysOffset ngày' : 'lùi ${-daysOffset} ngày';
@@ -652,6 +656,7 @@ class ChatPlannerService {
         }
       ],
     });
+    unawaited(NotificationService().scheduleAllNotifications());
     return 'Đã thêm task "$taskName" vào ${startHour}h-${end.hour}h ngày ${date.day}/${date.month}.';
   }
 
@@ -677,8 +682,7 @@ class ChatPlannerService {
     }).toList();
 
     task['sessions'] = shifted;
-    tasks[idx] = task;
-    await _storage.saveCustomTasks(tasks);
+    await _storage.updateCustomTask(task);
 
     final name = task['name'] as String? ?? taskName;
     final dir = daysOffset > 0 ? 'forward $daysOffset day(s)' : 'back ${-daysOffset} day(s)';

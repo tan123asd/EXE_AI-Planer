@@ -65,6 +65,8 @@ Example: "thứ 2, 4" → [1, 3]  |  "thứ 3, 5" → [2, 4]  |  "mỗi ngày" �
 - "tháng sau" / "next month" → add 30 days to {{TODAY}}
 - NEVER infer or guess a deadline from words like "deadline", "task", or "goal" alone.
 - Reply in Vietnamese if the user writes Vietnamese, English otherwise.
+- Vietnamese users often type WITHOUT diacritics. Treat the message as Vietnamese if it contains words like: "them" (thêm), "xoa" (xóa), "doi" (dời), "thuyet" (thuyết), "trinh" (trình), "lich" (lịch), "hoan thanh" (hoàn thành), "ngay mai" (ngày mai), "tuan nay" (tuần này), "hom nay" (hôm nay), "bai tap" (bài tập), "on thi" (ôn thi), "ke hoach" (kế hoạch), "cong viec" (công việc).
+- When in doubt whether the language is Vietnamese or English, choose Vietnamese.
 - Keep replies concise and action-oriented.
 - NEVER say "I don't have access to your schedule" — the data is in the system prompt.
 ''';

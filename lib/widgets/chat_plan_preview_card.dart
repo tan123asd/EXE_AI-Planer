@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/scheduler_models.dart';
 import '../utils/constants.dart';
+import 'time_picker_12h.dart';
 
 class ChatPlanPreviewCard extends StatefulWidget {
   final String goalName;
@@ -98,10 +99,9 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
     );
     if (date == null || !mounted) return;
 
-    final time = await showTimePicker(
-      context: context,
+    final time = await showTimePicker12h(
+      context,
       initialTime: TimeOfDay.fromDateTime(slot.startTime),
-      builder: (ctx, child) => Theme(data: pickerTheme, child: child!),
     );
     if (time == null || !mounted) return;
 
@@ -909,15 +909,13 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
 
   Widget _buildTimeField({required bool isStart}) {
     final current = isStart ? _customSlotStart : _customSlotEnd;
-    final label = isStart ? 'Start' : 'End';
+    final label = isStart ? 'Bắt đầu' : 'Kết thúc';
     return InkWell(
       onTap: () async {
-        final picked = await showTimePicker(
-          context: context,
+        final picked = await showTimePicker12h(
+          context,
           initialTime: current ??
-              (isStart
-                  ? TimeOfDay.now()
-                  : const TimeOfDay(hour: 10, minute: 0)),
+              (isStart ? TimeOfDay.now() : const TimeOfDay(hour: 10, minute: 0)),
         );
         if (picked != null) {
           setState(() {
@@ -939,9 +937,7 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
           border: Border.all(color: Colors.grey.shade300),
         ),
         child: Text(
-          current != null
-              ? '${current.hour.toString().padLeft(2, '0')}:${current.minute.toString().padLeft(2, '0')}'
-              : label,
+          current != null ? fmt12h(current) : label,
           style: TextStyle(
             fontSize: 13,
             color: current != null

@@ -10,6 +10,9 @@ import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/storage_service.dart';
 import 'services/user_profile_service.dart';
+import 'services/notification_service.dart';
+import 'services/sync_queue_service.dart';
+import 'services/connectivity_service.dart';
 import 'providers/theme_provider.dart';
 import 'providers/language_provider.dart';
 
@@ -23,6 +26,10 @@ void main() async {
 
   await StorageService().init();
   await UserProfileService().init();
+  await SyncQueueService().init();
+  ConnectivityService().init();
+  await NotificationService().init();
+  await NotificationService().scheduleAllNotifications();
 
   final languageProvider = LanguageProvider();
   await languageProvider.load();

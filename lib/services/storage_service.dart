@@ -1,5 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'firestore_service.dart';
+import 'sync_queue_service.dart';
+import 'connectivity_service.dart';
 
 class StorageService {
   static const String _tasksKey = 'tasks';
@@ -11,6 +14,7 @@ class StorageService {
   static const String _userPhoneKey = 'user_phone';
   static const String _userBioKey = 'user_bio';
   static const String _customTasksKey = 'custom_tasks';
+  static const String _customTasksUpdatedAtKey = 'custom_tasks_updatedAt';
   static const String _scheduleKey = 'generated_schedule';
   static const String _themeKey = 'theme_mode';
   static const String _filterKey = 'filter_preferences';
@@ -87,6 +91,8 @@ class StorageService {
       completed.add(taskId);
     }
     await saveCompletedTasks(completed);
+    final newStatus = completed.contains(taskId) ? 'completed' : 'pending';
+    await _syncOrQueueStatus(taskId, newStatus);
   }
 
   bool isTaskCompleted(String taskId) {
@@ -149,6 +155,7 @@ class StorageService {
   Future<void> saveCustomTasks(List<Map<String, dynamic>> tasks) async {
     final tasksJson = jsonEncode(tasks);
     await _prefs?.setString(_customTasksKey, tasksJson);
+    await _prefs?.setString(_customTasksUpdatedAtKey, DateTime.now().toUtc().toIso8601String());
   }
 
   List<Map<String, dynamic>> getCustomTasks() {
@@ -164,6 +171,11 @@ class StorageService {
     final tasks = getCustomTasks();
     tasks.add(task);
     await saveCustomTasks(tasks);
+    // Add requires internet — push to Firestore directly (no queue needed)
+    final online = await ConnectivityService().isOnline();
+    if (online) {
+      await FirestoreService().pushTask(task);
+    }
   }
 
   Future<void> setTaskSessionCompleted(
@@ -198,12 +210,50 @@ class StorageService {
 
     tasks[taskIndex] = task;
     await saveCustomTasks(tasks);
+    await _syncOrQueueCompleteSession(
+        taskId: taskId, sessionIndex: sessionIndex, isCompleted: isCompleted);
   }
 
   Future<void> deleteCustomTask(String taskId) async {
     final tasks = getCustomTasks();
     tasks.removeWhere((task) => task['id'] == taskId);
     await saveCustomTasks(tasks);
+    await _syncOrQueueDeleteTask(taskId);
+  }
+
+  /// Replaces a task in-place and pushes the update to Firestore when online.
+  /// Use for session edits, time shifts, re-plans — not for adds/deletes.
+  Future<void> updateCustomTask(Map<String, dynamic> updatedTask) async {
+    final taskId = (updatedTask['id'] ?? '').toString();
+    if (taskId.isEmpty) return;
+    final tasks = getCustomTasks();
+    final idx = tasks.indexWhere((t) => (t['id'] ?? '').toString() == taskId);
+    if (idx == -1) return;
+    tasks[idx] = updatedTask;
+    await saveCustomTasks(tasks);
+    final online = await ConnectivityService().isOnline();
+    if (online) {
+      await FirestoreService().pushTask(updatedTask);
+    }
+  }
+
+  /// Deletes all tasks from local storage and Firestore.
+  /// Uses batch delete on Firestore when online; queues each deletion otherwise.
+  Future<void> deleteAllCustomTasks() async {
+    final tasks = getCustomTasks();
+    if (tasks.isEmpty) return;
+    await saveCustomTasks([]); // clears local + updates timestamp
+    final online = await ConnectivityService().isOnline();
+    if (online) {
+      await FirestoreService().deleteAllTasks();
+    } else {
+      for (final task in tasks) {
+        final id = (task['id'] ?? '').toString();
+        if (id.isNotEmpty) {
+          await SyncQueueService().enqueueDeleteTask(id);
+        }
+      }
+    }
   }
 
   /// Xóa 1 session khỏi task. Nếu không còn session nào thì xóa luôn task cha.
@@ -225,11 +275,14 @@ class StorageService {
 
     if (sessions.isEmpty) {
       tasks.removeAt(taskIndex);
+      await saveCustomTasks(tasks);
+      await _syncOrQueueDeleteTask(taskId);
     } else {
       task['sessions'] = sessions;
       tasks[taskIndex] = task;
+      await saveCustomTasks(tasks);
+      await _syncOrQueueDeleteSession(taskId: taskId, sessionIndex: sessionIndex);
     }
-    await saveCustomTasks(tasks);
   }
 
   // ==================== GENERATED SCHEDULE ====================
@@ -297,6 +350,22 @@ class StorageService {
     final filters = getFilterPreferences();
     filters[key] = value;
     await saveFilterPreferences(filters);
+  }
+
+  // ==================== NOTIFICATION SETTINGS ====================
+
+  static const String _notificationsEnabledKey = 'notifications_enabled';
+
+  Future<void> saveNotificationsEnabled(bool enabled) async {
+    await _prefs?.setBool(_notificationsEnabledKey, enabled);
+  }
+
+  bool getNotificationsEnabled() {
+    return _prefs?.getBool(_notificationsEnabledKey) ?? true;
+  }
+
+  String getLanguageCode() {
+    return _prefs?.getString('language_code') ?? 'en';
   }
 
   // ==================== CLEAR DATA ====================
@@ -410,20 +479,26 @@ class StorageService {
   Future<void> saveBreakSettings(Map<String, dynamic> settings) async {
     final settingsJson = jsonEncode(settings);
     await _prefs?.setString(_breakSettingsKey, settingsJson);
+    await _touchProfileTs();
   }
   
   Map<String, dynamic> getBreakSettings() {
+    const defaults = {
+      'enabled': true,
+      'workDuration': 50,
+      'breakDuration': 10,
+      'longBreakDuration': 30,
+      'longBreakAfterSessions': 4,
+    };
     final settingsJson = _prefs?.getString(_breakSettingsKey);
-    if (settingsJson == null || settingsJson.isEmpty) {
-      return {
-        'enabled': true,
-        'workDuration': 50, // minutes
-        'breakDuration': 10, // minutes
-        'longBreakDuration': 30, // minutes
-        'longBreakAfterSessions': 4, // number of sessions
-      };
+    if (settingsJson == null || settingsJson.isEmpty) return Map.of(defaults);
+    try {
+      final stored = jsonDecode(settingsJson) as Map<String, dynamic>;
+      // Merge: stored values override defaults; missing keys fall back to defaults
+      return {...defaults, ...stored};
+    } catch (_) {
+      return Map.of(defaults);
     }
-    return jsonDecode(settingsJson);
   }
   
   // ==================== PRODUCTIVITY HOURS ====================
@@ -433,6 +508,7 @@ class StorageService {
   Future<void> saveProductivityHours(
       List<Map<String, dynamic>> windows) async {
     await _prefs?.setString(_productivityHoursKey, jsonEncode(windows));
+    await _touchProfileTs();
   }
 
   List<Map<String, dynamic>> getProductivityHours() {
@@ -706,5 +782,85 @@ class StorageService {
   Future<void> clearChatHistory() async {
     await _prefs?.remove(_chatHistoryKey);
     await _prefs?.remove(_chatContextKey);
+  }
+
+  // ─── Profile field saves (with timestamp) ────────────────────────────────────
+
+  Future<void> saveUserNameWithSync(String name) async {
+    await saveUserName(name);
+    await _touchProfileTs();
+  }
+
+  Future<void> saveUserBioWithSync(String bio) async {
+    await saveUserBio(bio);
+    await _touchProfileTs();
+  }
+
+  Future<void> saveUserPhoneWithSync(String phone) async {
+    await saveUserPhone(phone);
+    await _touchProfileTs();
+  }
+
+  Future<void> saveUserPhotoUrlWithSync(String photoUrl) async {
+    await saveUserPhotoUrl(photoUrl);
+    await _touchProfileTs();
+  }
+
+  // ─── Sync helpers ─────────────────────────────────────────────────────────────
+
+  Future<void> _touchProfileTs() async {
+    await _prefs?.setString(
+        'profile_updatedAt', DateTime.now().toUtc().toIso8601String());
+  }
+
+  Future<void> _syncOrQueueStatus(String taskId, String status) async {
+    final online = await ConnectivityService().isOnline();
+    if (online) {
+      await FirestoreService().updateTaskFields(taskId, {'status': status});
+    } else {
+      await SyncQueueService().enqueueUpdateStatus(taskId: taskId, status: status);
+    }
+  }
+
+  Future<void> _syncOrQueueCompleteSession({
+    required String taskId,
+    required int sessionIndex,
+    required bool isCompleted,
+  }) async {
+    final online = await ConnectivityService().isOnline();
+    if (online) {
+      await FirestoreService()
+          .updateSessionCompleted(taskId, sessionIndex, isCompleted);
+    } else {
+      await SyncQueueService().enqueueCompleteSession(
+          taskId: taskId, sessionIndex: sessionIndex, isCompleted: isCompleted);
+    }
+  }
+
+  Future<void> _syncOrQueueDeleteTask(String taskId) async {
+    final online = await ConnectivityService().isOnline();
+    if (online) {
+      await FirestoreService().deleteTask(taskId);
+    } else {
+      await SyncQueueService().enqueueDeleteTask(taskId);
+    }
+  }
+
+  Future<void> _syncOrQueueDeleteSession({
+    required String taskId,
+    required int sessionIndex,
+  }) async {
+    final online = await ConnectivityService().isOnline();
+    if (online) {
+      final tasks = getCustomTasks();
+      final task = tasks.firstWhere(
+        (t) => t['id']?.toString() == taskId,
+        orElse: () => {},
+      );
+      if (task.isNotEmpty) await FirestoreService().pushTask(task);
+    } else {
+      await SyncQueueService().enqueueDeleteSession(
+          taskId: taskId, sessionIndex: sessionIndex);
+    }
   }
 }

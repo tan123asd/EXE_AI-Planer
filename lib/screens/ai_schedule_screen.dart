@@ -1,9 +1,11 @@
+import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
 import 'package:ai_study_planner/l10n/app_localizations.dart';
 import '../models/schedule_item.dart';
 import '../utils/constants.dart';
 import '../widgets/schedule_card.dart';
 import '../services/storage_service.dart';
+import '../services/notification_service.dart';
 
 class AIScheduleScreen extends StatefulWidget {
   final Map<String, dynamic>? taskData;
@@ -281,8 +283,9 @@ class _AIScheduleScreenState extends State<AIScheduleScreen> {
                           // Save task data if provided
                           if (widget.taskData != null) {
                             await _storage.addCustomTask(widget.taskData!);
+                            unawaited(NotificationService().scheduleAllNotifications());
                           }
-                          
+
                           // Show success message
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(

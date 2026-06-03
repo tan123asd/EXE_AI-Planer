@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'dart:async' show unawaited;
 import 'package:ai_study_planner/l10n/app_localizations.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
 import '../services/ai_service.dart';
 import '../services/scheduler_service.dart';
+import '../services/notification_service.dart';
 import '../models/scheduler_models.dart';
+import '../widgets/time_picker_12h.dart';
 import 'package:intl/intl.dart';
 
 class NewTaskInputScreen extends StatefulWidget {
@@ -131,23 +134,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     );
     
     if (pickedDate != null && mounted) {
-      final TimeOfDay? pickedTime = await showTimePicker(
-        context: context,
+      final TimeOfDay? pickedTime = await showTimePicker12h(
+        context,
         initialTime: _deadlineTime ?? TimeOfDay.now(),
-        initialEntryMode: TimePickerEntryMode.input,
-        builder: (context, child) {
-          return Theme(
-            data: Theme.of(context).copyWith(
-              colorScheme: ColorScheme.light(
-                primary: AppColors.primary,
-                onPrimary: Colors.white,
-                surface: Colors.white,
-                onSurface: AppColors.textPrimary,
-              ),
-            ),
-            child: child!,
-          );
-        },
       );
       
       if (pickedTime != null) {
@@ -342,7 +331,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           cardText += '\n$lines';
           if (needsBreaks && subtask.duration * 60 > 60) {
             cardText +=
-                '\n⏱️ ${breakSettings['workDuration']}min work / ${breakSettings['breakDuration']}min break';
+                '\n⏱️ ${breakSettings['workDuration'] ?? 50}min work / ${breakSettings['breakDuration'] ?? 10}min break';
           }
           _aiSuggestedSlots.add(cardText);
         }
@@ -662,7 +651,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     String text = '$header\n$lines';
     if (needsBreaks) {
       text +=
-          '\n⏱️ ${breakSettings['workDuration']}min work / ${breakSettings['breakDuration']}min break';
+          '\n⏱️ ${breakSettings['workDuration'] ?? 50}min work / ${breakSettings['breakDuration'] ?? 10}min break';
     }
     return text;
   }
@@ -777,7 +766,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         if (needsBreaks) ...[
           const SizedBox(height: 6),
           Text(
-            '⏱️ ${breakSettings['workDuration']}min work / ${breakSettings['breakDuration']}min break',
+            '⏱️ ${breakSettings['workDuration'] ?? 50}min work / ${breakSettings['breakDuration'] ?? 10}min break',
             style: const TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
@@ -1011,16 +1000,11 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   ),
                                 );
                                 if (pickedDate == null) return;
-                                final pickedTime = await showTimePicker(
-                                  context: builderCtx,
+                                final pickedTime = await showTimePicker12h(
+                                  builderCtx,
                                   initialTime: TimeOfDay(
                                     hour: start.hour,
                                     minute: start.minute,
-                                  ),
-                                  initialEntryMode: TimePickerEntryMode.input,
-                                  builder: (ctx, child) => Theme(
-                                    data: pickerTheme,
-                                    child: child!,
                                   ),
                                 );
                                 if (pickedTime == null) return;
@@ -1542,9 +1526,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       );
       return;
     }
-    
-    _formKey.currentState!.save();
-    
+
+    _formKey.currentState?.save();
+
     // Use AI-estimated minutes (only for Task type)
     int estimatedHours = 1;
     int estimatedMinutes = 60;
@@ -1597,9 +1581,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         'notes': _notes,
         'createdAt': DateTime.now().toIso8601String(),
         // 🆕 Break reminders
-        'needsBreak': estimatedHours > 1 && breakSettings['enabled'],
-        'breakInterval': breakSettings['workDuration'],
-        'breakDuration': breakSettings['breakDuration'],
+        'needsBreak': estimatedHours > 1 && (breakSettings['enabled'] as bool? ?? true),
+        'breakInterval': breakSettings['workDuration'] ?? 50,
+        'breakDuration': breakSettings['breakDuration'] ?? 10,
         // 🆕 For performance tracking
         'startedAt': null,
         'completedAt': null,
@@ -1645,7 +1629,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     }
     
     await _storage.addCustomTask(taskData);
-    
+    unawaited(NotificationService().scheduleAllNotifications());
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -2055,7 +2040,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   Expanded(
                                     child: Text(
                                       _deadline != null && _deadlineTime != null
-                                          ? '${DateFormat('d MMM yyyy').format(_deadline!)} • ${_deadlineTime!.format(context)}'
+                                          ? '${DateFormat('d MMM yyyy').format(_deadline!)} • ${fmt12h(_deadlineTime!)}'
                                           : l10n.selectDateAndTime,
                                       style: TextStyle(
                                         fontSize: 16,
@@ -2091,23 +2076,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                           const SizedBox(height: 16),
                           InkWell(
                             onTap: () async {
-                              final TimeOfDay? picked = await showTimePicker(
-                                context: context,
+                              final TimeOfDay? picked = await showTimePicker12h(
+                                context,
                                 initialTime: _scheduleStartTime ?? TimeOfDay.now(),
-                                initialEntryMode: TimePickerEntryMode.input,
-                                builder: (context, child) {
-                                  return Theme(
-                                    data: Theme.of(context).copyWith(
-                                      colorScheme: ColorScheme.light(
-                                        primary: AppColors.primary,
-                                        onPrimary: Colors.white,
-                                        surface: Colors.white,
-                                        onSurface: AppColors.textPrimary,
-                                      ),
-                                    ),
-                                    child: child!,
-                                  );
-                                },
                               );
                               if (picked != null) {
                                 setState(() {
@@ -2145,7 +2116,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   Expanded(
                                     child: Text(
                                       _scheduleStartTime != null
-                                          ? _scheduleStartTime!.format(context)
+                                          ? fmt12h(_scheduleStartTime!)
                                           : l10n.selectStartTime,
                                       style: TextStyle(
                                         fontSize: 16,
@@ -2177,23 +2148,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                           const SizedBox(height: 16),
                           InkWell(
                             onTap: () async {
-                              final TimeOfDay? picked = await showTimePicker(
-                                context: context,
+                              final TimeOfDay? picked = await showTimePicker12h(
+                                context,
                                 initialTime: _scheduleEndTime ?? TimeOfDay.now(),
-                                initialEntryMode: TimePickerEntryMode.input,
-                                builder: (context, child) {
-                                  return Theme(
-                                    data: Theme.of(context).copyWith(
-                                      colorScheme: ColorScheme.light(
-                                        primary: AppColors.primary,
-                                        onPrimary: Colors.white,
-                                        surface: Colors.white,
-                                        onSurface: AppColors.textPrimary,
-                                      ),
-                                    ),
-                                    child: child!,
-                                  );
-                                },
                               );
                               if (picked != null) {
                                 setState(() {
@@ -2231,7 +2188,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   Expanded(
                                     child: Text(
                                       _scheduleEndTime != null
-                                          ? _scheduleEndTime!.format(context)
+                                          ? fmt12h(_scheduleEndTime!)
                                           : l10n.selectEndTime,
                                       style: TextStyle(
                                         fontSize: 16,
@@ -2949,20 +2906,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     Expanded(
                                       child: InkWell(
                                         onTap: () async {
-                                          final picked = await showTimePicker(
-                                            context: context,
+                                          final picked = await showTimePicker12h(
+                                            context,
                                             initialTime: _customSlotStart ?? TimeOfDay.now(),
-                                            builder: (c, child) => Theme(
-                                              data: Theme.of(context).copyWith(
-                                                colorScheme: ColorScheme.light(
-                                                  primary: AppColors.primary,
-                                                  onPrimary: Colors.white,
-                                                  surface: Colors.white,
-                                                  onSurface: AppColors.textPrimary,
-                                                ),
-                                              ),
-                                              child: child!,
-                                            ),
                                           );
                                           if (picked != null) setState(() => _customSlotStart = picked);
                                         },
@@ -2976,8 +2922,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                           ),
                                           child: Text(
                                             _customSlotStart != null
-                                                ? '${_customSlotStart!.hour.toString().padLeft(2, '0')}:${_customSlotStart!.minute.toString().padLeft(2, '0')}'
-                                                : 'Start',
+                                                ? fmt12h(_customSlotStart!)
+                                                : 'Bắt đầu',
                                             style: TextStyle(
                                               fontSize: 13,
                                               color: _customSlotStart != null ? AppColors.textPrimary : AppColors.textSecondary,
@@ -2990,20 +2936,9 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     Expanded(
                                       child: InkWell(
                                         onTap: () async {
-                                          final picked = await showTimePicker(
-                                            context: context,
-                                            initialTime: _customSlotEnd ?? TimeOfDay(hour: 10, minute: 0),
-                                            builder: (c, child) => Theme(
-                                              data: Theme.of(context).copyWith(
-                                                colorScheme: ColorScheme.light(
-                                                  primary: AppColors.primary,
-                                                  onPrimary: Colors.white,
-                                                  surface: Colors.white,
-                                                  onSurface: AppColors.textPrimary,
-                                                ),
-                                              ),
-                                              child: child!,
-                                            ),
+                                          final picked = await showTimePicker12h(
+                                            context,
+                                            initialTime: _customSlotEnd ?? const TimeOfDay(hour: 10, minute: 0),
                                           );
                                           if (picked != null) setState(() => _customSlotEnd = picked);
                                         },
@@ -3017,8 +2952,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                           ),
                                           child: Text(
                                             _customSlotEnd != null
-                                                ? '${_customSlotEnd!.hour.toString().padLeft(2, '0')}:${_customSlotEnd!.minute.toString().padLeft(2, '0')}'
-                                                : 'End',
+                                                ? fmt12h(_customSlotEnd!)
+                                                : 'Kết thúc',
                                             style: TextStyle(
                                               fontSize: 13,
                                               color: _customSlotEnd != null ? AppColors.textPrimary : AppColors.textSecondary,

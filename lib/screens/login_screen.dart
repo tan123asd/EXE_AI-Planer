@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ai_study_planner/services/auth_service.dart';
 import 'package:ai_study_planner/services/storage_service.dart';
+import 'package:ai_study_planner/services/firestore_service.dart';
+import 'package:ai_study_planner/services/connectivity_service.dart';
 import 'package:ai_study_planner/utils/constants.dart' as app_constants;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -153,10 +156,19 @@ class _LoginScreenState extends State<LoginScreen> {
         await _storageService.saveUserName(displayName);
         await _storageService.saveUserEmail(email);
         await _storageService.saveUserPhotoUrl(photoUrl);
+
+        // Initial sync: Firestore ↔ local (pull remote or push local if new account).
+        // Wrapped in its own try-catch so a sync failure never blocks navigation.
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await FirestoreService().initialSync(prefs);
+          await ConnectivityService().syncNow();
+        } catch (_) {
+          // Sync failed — proceed to home. ConnectivityService will retry on reconnect.
+        }
       }
 
       if (userCredential != null && mounted) {
-        // Navigate to home screen
         Navigator.of(context).pushReplacementNamed('/home');
       }
     } on PlatformException catch (e) {
