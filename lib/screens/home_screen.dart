@@ -32,6 +32,8 @@ class _HomeScreenState extends State<HomeScreen> {
   
   // Current tasks to display
   List<Map<String, dynamic>> _todayTasks = [];
+  List<Map<String, dynamic>> _subjectBreakdown = [];
+  String _greetingName = '';
   int _dayStreak = 7;
   int _completedTasksCount = 0;
   int _plannedTaskUnitsCount = 0;
@@ -142,6 +144,21 @@ class _HomeScreenState extends State<HomeScreen> {
       _completedTasksCount = _todayTasks.fold<int>(0, (sum, task) {
         return sum + _getCompletedTaskUnits(task);
       });
+
+      // Cache subject breakdown — avoids recomputing on every build()
+      _subjectBreakdown = _getSubjectBreakdown();
+
+      // Cache greeting name — avoids reading SharedPreferences on every build()
+      final storedName = _storage.getUserName().trim();
+      if (storedName.isNotEmpty) {
+        _greetingName = storedName;
+      } else {
+        final fbUser = FirebaseAuth.instance.currentUser;
+        final fbName = fbUser?.displayName?.trim().isNotEmpty == true
+            ? fbUser!.displayName!.trim()
+            : (fbUser?.email?.split('@').first ?? '');
+        _greetingName = fbName.isEmpty ? 'Student' : fbName;
+      }
     });
   }
 
@@ -423,16 +440,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return greetings[_getGreetingTime()];
   }
 
-  String _getGreetingName() {
-    String name = _storage.getUserName().trim();
-    if (name.isEmpty) {
-      final fbUser = FirebaseAuth.instance.currentUser;
-      name = fbUser?.displayName?.trim().isNotEmpty == true
-          ? fbUser!.displayName!.trim()
-          : (fbUser?.email?.split('@').first ?? '');
-    }
-    return name.isEmpty ? 'Student' : name;
-  }
+  String _getGreetingName() => _greetingName.isEmpty ? 'Student' : _greetingName;
 
   bool _isTaskUnitTracked(Map<String, dynamic> task) {
     return (task['taskType'] ?? '').toString() == 'Task';
@@ -832,7 +840,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSubjectAnalysisCard(AppLocalizations l10n) {
-    final breakdown = _getSubjectBreakdown();
+    final breakdown = _subjectBreakdown;
     if (breakdown.isEmpty) {
       return const SizedBox.shrink();
     }

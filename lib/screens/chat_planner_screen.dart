@@ -926,6 +926,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.symmetric(vertical: 12),
+      cacheExtent: 500,
       itemCount: _messages.length,
       itemBuilder: (ctx, i) {
         final msg = _messages[i];
