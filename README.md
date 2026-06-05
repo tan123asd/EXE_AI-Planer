@@ -1,209 +1,151 @@
-# AI Study Planner
+# AI Planner
 
-An AI-powered student life scheduler mobile app built with Flutter. This app helps students manage study deadlines and personal development activities with a modern, minimal UI design.
+> 🇻🇳 [Xem bản Tiếng Việt](README.vi.md)
+
+An AI-powered scheduler for students, built with Flutter. Uses AI to generate study plans, manage deadlines, and track personal activities.
 
 ## Features
 
-- **Splash Screen**: Welcome screen with app branding
-- **Daily Check-in**: Quick check-in to update daily tasks
-- **Home Dashboard**: 
-  - Personalized greeting
-  - Today's progress tracker
-  - Task list with priority indicators
-  - Weekly calendar view
-  - Personal growth activities
-- **Task Management**: Add tasks with details like difficulty, deadline, and estimated time
-- **AI Schedule Generation**: View AI-generated personalized schedules
-- **Bottom Navigation**: Easy access to Home, Tasks, Calendar, and Profile
+### Free
+- Create deadline-based tasks with AI auto-scheduling (15 AI calls/day)
+- Chat with AI Agent to plan your schedule
+- Weekly calendar, progress tracking
+- Pomodoro reminders (50 min work / 10 min break)
+- Multi-device sync via Firestore
+- Google Sign-In
 
-## Project Structure
+### Pro (79,000 VND/month or 790,000 VND/year)
+- Unlimited AI Agent chat
+- 100 AI calls/day
+- Priority responses, early access to new features
+
+## Architecture
 
 ```
 lib/
-├── main.dart                    # App entry point
+├── main.dart
 ├── models/
-│   ├── task.dart               # Task data model
-│   └── schedule_item.dart      # Schedule item data model
+│   ├── task.dart                   # Task, ScheduleItem, Activity
+│   ├── schedule_item.dart
+│   ├── chat_models.dart            # ChatMessage, ConversationContext, AiToolCall
+│   └── scheduler_models.dart       # AiTaskPlan, ScheduledSlot, ProductivityWindow
 ├── screens/
-│   ├── splash_screen.dart      # Welcome/splash screen
-│   ├── daily_check_screen.dart # Daily check-in screen
-│   ├── home_screen.dart        # Main dashboard
-│   ├── task_input_screen.dart  # Add new task screen
-│   ├── ai_schedule_screen.dart # AI generated schedule
-│   ├── tasks_screen.dart       # All tasks view (placeholder)
-│   ├── calendar_screen.dart    # Calendar view (placeholder)
-│   └── profile_screen.dart     # User profile screen
+│   ├── home_screen.dart            # Main dashboard
+│   ├── chat_planner_screen.dart    # AI Agent chat
+│   ├── calendar_screen.dart        # Day/week calendar
+│   ├── payment_screen.dart         # Pro upgrade (VietQR)
+│   ├── profile_screen.dart         # Settings, productivity hours
+│   ├── new_task_input_screen.dart  # Create new task
+│   └── ai_schedule_screen.dart     # View AI-generated schedule
+├── services/
+│   ├── ai_service.dart             # Gemini API → AiTaskPlan
+│   ├── scheduler_service.dart      # Scheduling algorithm (deadline + activity)
+│   ├── chat_ai_service.dart        # GPT-4o-mini Function Calling
+│   ├── chat_planner_service.dart   # Tool call executor
+│   ├── payment_service.dart        # payment_request creation, VietQR
+│   ├── subscription_service.dart   # Free/Pro tier management + expiry
+│   ├── firestore_service.dart      # Firestore ↔ local sync
+│   ├── storage_service.dart        # SharedPreferences CRUD
+│   ├── auth_service.dart           # Firebase Auth
+│   └── notification_service.dart   # Local push notifications
 ├── widgets/
-│   ├── task_card.dart          # Reusable task card widget
-│   ├── growth_activity_card.dart # Personal growth activity card
-│   └── schedule_card.dart      # Schedule item card widget
+│   ├── chat_message_bubble.dart
+│   ├── chat_plan_preview_card.dart # Plan preview + Approve/Reject
+│   ├── upgrade_dialog.dart         # Pro upgrade dialog
+│   └── ...
 └── utils/
-    └── constants.dart          # App constants (colors, text styles, spacing)
+    └── constants.dart              # Design system (colors, typography)
+
+vercel-backend/
+└── api/
+    └── webhook.js                  # Receives Sepay webhook, updates Firestore
+```
+
+## Setup
+
+### Requirements
+- Flutter SDK `>=3.0.0`
+- Dart SDK `>=3.0.0`
+- Firebase project (Auth + Firestore)
+- OpenAI API key (GPT-4o-mini)
+
+### Run locally
+
+```bash
+flutter pub get
+flutter run --dart-define=OPENAI_API_KEY=sk-...
+```
+
+### Build release
+
+```bash
+# Android
+flutter build apk --release --dart-define=OPENAI_API_KEY=sk-...
+
+# iOS
+flutter build ios --release --dart-define=OPENAI_API_KEY=sk-...
+```
+
+## Firebase Configuration
+
+`lib/firebase_options.dart` is generated automatically by the FlutterFire CLI:
+
+```bash
+flutterfire configure
+```
+
+`android/app/google-services.json` is downloaded from Firebase Console → Project Settings → Android app.
+
+## Payment Webhook (Vercel)
+
+Handles Sepay transaction notifications and auto-activates Pro subscriptions.
+
+### Deploy
+
+```bash
+cd vercel-backend
+vercel --prod
+```
+
+### Vercel Environment Variables
+
+| Variable | Description |
+|---|---|
+| `FIREBASE_PROJECT_ID` | Firebase project ID |
+| `FIREBASE_CLIENT_EMAIL` | Service account email |
+| `FIREBASE_PRIVATE_KEY` | Service account private key |
+| `SEPAY_API_KEY` | Webhook auth key from Sepay |
+
+### Sepay Configuration
+
+Webhook URL (use the alias — never a specific deployment URL):
+```
+https://vercel-backend-zeta-one.vercel.app/api/webhook
+```
+
+## Payment Flow
+
+```
+User selects plan → Flutter creates payment_request in Firestore
+→ Shows VietQR code + ref code (e.g. AP84YZYH)
+→ User transfers via Sacombank (MUST include ref code in transfer note)
+→ Sepay detects transaction → POST to webhook
+→ Webhook validates, updates subscription_tier + subscription_expire_at
+→ App receives Firestore snapshot → shows "Payment successful"
 ```
 
 ## Design System
 
-### Color Palette
-- **Primary**: #4A90E2 (Blue)
-- **Primary Dark**: #2E5C8A
-- **Primary Light**: #6FA8E8
-- **Background**: #F5F7FA
-- **Card Background**: White
-- **Success**: #2ECC71 (Easy tasks)
-- **Warning**: #F39C12 (Medium tasks)
-- **Danger**: #E74C3C (Hard tasks)
+Defined in `lib/utils/constants.dart`.
 
-### Design Principles
-- Modern minimal UI
-- Soft shadows for depth
-- Rounded corners on all cards
-- Consistent spacing
-- Clean typography
-- Student-friendly interface
+| Token | Value |
+|---|---|
+| Primary | `#FF6B35` (orange) |
+| Background | `#F8F9FA` |
+| Success | `#10B981` |
+| Warning | `#F59E0B` |
+| Danger | `#EF4444` |
 
-## Getting Started
+## Support
 
-### Prerequisites
-- Flutter SDK (>=2.19.0)
-- Dart SDK
-- Android Studio or VS Code with Flutter extensions
-- Android/iOS device or emulator
-
-### Installation
-
-1. Clone the repository or navigate to the project directory:
-```bash
-cd EXE
-```
-
-2. Install dependencies:
-```bash
-flutter pub get
-```
-
-3. Run the app:
-```bash
-flutter run
-```
-
-### Building
-
-**Android:**
-```bash
-flutter build apk --release
-```
-
-**iOS:**
-```bash
-flutter build ios --release
-```
-
-## Screens Overview
-
-### 1. Splash Screen
-- App logo and branding
-- Tagline: "Balance Study, Life, and Growth"
-- "Get Started" button
-
-### 2. Daily Check Screen
-- Centered card with question: "Do you have any updates for today?"
-- YES/NO buttons for quick check-in
-
-### 3. Home Screen
-- **Top Section**: Greeting and progress bar
-- **Tasks Section**: Today's tasks with checkboxes and priority indicators
-- **Calendar Section**: Weekly calendar widget showing the current week
-- **Growth Activities**: Horizontal scrollable cards for Gym, Reading, Meditation, and Skill Learning
-- **Floating Action Button**: Quick add task button
-
-### 4. Task Input Screen
-- Form fields for:
-  - Task name
-  - Subject
-  - Difficulty (Easy/Medium/Hard)
-  - Deadline (date picker)
-  - Estimated time (hours)
-  - Category (Study/Personal Development)
-- "Generate AI Schedule" button
-
-### 5. AI Schedule Screen
-- Grouped schedule by day
-- Time slots with visual indicators
-- Schedule cards with difficulty markers
-- "Regenerate" and "Save Schedule" buttons
-
-### 6. Navigation Screens
-- **Tasks**: All tasks view (placeholder)
-- **Calendar**: Full calendar view (placeholder)
-- **Profile**: User profile with settings options
-
-## Architecture
-
-The app follows a clean architecture approach:
-- **Models**: Data classes for Task and ScheduleItem
-- **Screens**: Full-screen views with state management
-- **Widgets**: Reusable UI components
-- **Utils**: Constants and shared utilities
-
-## Customization
-
-### Colors
-Edit colors in [lib/utils/constants.dart](lib/utils/constants.dart):
-```dart
-class AppColors {
-  static const Color primary = Color(0xFF4A90E2);
-  // ... other colors
-}
-```
-
-### Text Styles
-Modify text styles in [lib/utils/constants.dart](lib/utils/constants.dart):
-```dart
-class AppTextStyles {
-  static const TextStyle heading1 = TextStyle(
-    fontSize: 28,
-    fontWeight: FontWeight.bold,
-    color: AppColors.textPrimary,
-  );
-  // ... other styles
-}
-```
-
-### Spacing & Radius
-Adjust spacing and border radius in [lib/utils/constants.dart](lib/utils/constants.dart):
-```dart
-class AppSpacing {
-  static const double xs = 4.0;
-  static const double sm = 8.0;
-  // ... other spacings
-}
-```
-
-## Future Enhancements
-
-- Backend integration for data persistence
-- Real AI-powered schedule generation
-- Push notifications for tasks
-- Task completion statistics
-- Study streak tracking
-- Dark mode support
-- Multi-language support
-- Calendar integration
-- Task sharing and collaboration
-
-## Notes
-
-This is a **UI prototype** without backend functionality. All data is currently hardcoded for demonstration purposes. To add backend functionality:
-1. Integrate a state management solution (Provider, Riverpod, Bloc, etc.)
-2. Add a backend API (Firebase, REST API, etc.)
-3. Implement data persistence (SQLite, Hive, etc.)
-4. Add authentication
-5. Implement real AI scheduling algorithms
-
-## License
-
-This project is open source and available for educational purposes.
-
-## Author
-
-Created as a mobile UI prototype for an AI-powered student scheduler application.
+Contact: **0935457152**
