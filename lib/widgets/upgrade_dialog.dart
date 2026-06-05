@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
+import '../screens/payment_screen.dart';
 
 class UpgradeDialog extends StatelessWidget {
   const UpgradeDialog({Key? key}) : super(key: key);
@@ -55,11 +56,9 @@ class UpgradeDialog extends StatelessWidget {
           ),
           onPressed: () {
             Navigator.pop(context);
-            // TODO: Replace with payment flow (ZaloPay / Stripe).
-            // SubscriptionService().upgradeToPro() must only be called
-            // from a verified server-side payment callback, never directly from UI.
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Tính năng thanh toán đang được phát triển.')),
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PaymentScreen()),
             );
           },
           child: const Text('Nâng cấp'),

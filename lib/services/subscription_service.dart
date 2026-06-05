@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firestore_service.dart';
@@ -28,16 +29,31 @@ class SubscriptionService {
   Future<void> init() async {
     // 1. Try Firestore first — server is authoritative.
     try {
-      final remote = await FirestoreService()
-          .fetchSubscriptionTier()
+      final profile = await FirestoreService()
+          .fetchProfile()
           .timeout(const Duration(seconds: 5));
-      if (remote != null) {
-        _tier = remote == 'pro' ? UserTier.pro : UserTier.free;
+
+      if (profile != null) {
+        final remote = profile['subscription_tier'] as String?;
+        final expireRaw = profile['subscription_expire_at'];
+        final expireAt = expireRaw is Timestamp ? expireRaw.toDate() : null;
+
+        // Downgrade to free if Pro has expired
+        final isProValid = remote == 'pro' &&
+            (expireAt == null || expireAt.isAfter(DateTime.now()));
+
+        _tier = isProValid ? UserTier.pro : UserTier.free;
         await _persistCache(_tier);
+
+        // Sync expired status back to Firestore
+        if (remote == 'pro' && !isProValid) {
+          await FirestoreService()
+              .setSubscriptionTier('free')
+              .timeout(const Duration(seconds: 5));
+        }
         return;
       }
-      // Field missing in Firestore (free user who hasn't had it set yet).
-      // Write 'free' so the field exists for future reads and security rules.
+      // No profile yet — write 'free' so the field exists.
       _tier = UserTier.free;
       await _persistCache(_tier);
       await FirestoreService()
@@ -45,7 +61,7 @@ class SubscriptionService {
           .timeout(const Duration(seconds: 5));
       return;
     } catch (_) {
-      // Firestore unavailable (offline or test environment) — fall through to cache.
+      // Firestore unavailable — fall through to cache.
     }
 
     // 2. Offline fallback: read from local cache.
