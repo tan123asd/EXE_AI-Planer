@@ -50,6 +50,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
   String _lastGeneratedSignature = '';
   int? _activityDurationMinutes;
   int? _dailyHoursLimit; // null = no cap
+  List<String> _scheduleConflictDates = [];
   // Task: multi-select AI slots + custom slots
   final Set<int> _selectedSuggestionIndices = {};
   final Map<int, Set<int>> _selectedSessionsPerOption = {};
@@ -389,12 +390,26 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         final weekdaysText = weekdaysList.map((d) => days[d - 1]).join(', ');
 
         if (_taskType == 'Schedules') {
-          // Format time range in 24h display.
           final startTimeText = _formatTimeOfDay24H(_scheduleStartTime!);
           final endTimeText = _formatTimeOfDay24H(_scheduleEndTime!, isRangeEnd: true);
-
           _aiEstimatedEffort = 'Recurring schedule';
-          _aiSuggestedSlots.add('📅 Every $weekdaysText\n🕐 $startTimeText – $endTimeText');
+
+          _scheduleConflictDates = _getNewScheduleConflicts();
+          if (_scheduleConflictDates.isEmpty) {
+            _aiSuggestedSlots.add(
+              '✅ Every $weekdaysText\n🕐 $startTimeText – $endTimeText\nNo conflicts found',
+            );
+          } else {
+            final conflictSummary =
+                _scheduleConflictDates.take(3).join(', ');
+            final moreSuffix = _scheduleConflictDates.length > 3
+                ? ' +${_scheduleConflictDates.length - 3} more'
+                : '';
+            _aiSuggestedSlots.add(
+              '⚠️ Every $weekdaysText\n🕐 $startTimeText – $endTimeText\n'
+              '❌ Conflicts on: $conflictSummary$moreSuffix',
+            );
+          }
         } else {
           // Activity: use SchedulerService to find conflict-free slots on preferred weekdays
           final mins = (_activityDurationMinutes ?? 0).clamp(1, 24 * 60);
@@ -575,6 +590,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     _editedSessionGroups = <List<Map<String, dynamic>>>[];
     _userEditedOptions = <int>{};
     _lastGeneratedSignature = '';
+    _scheduleConflictDates = [];
   }
 
   String _buildPlanningSignature() {
@@ -1375,7 +1391,42 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     final endMinutes = end.hour * 60 + end.minute;
     return endMinutes > startMinutes;
   }
-  
+
+  /// Expands the new recurring schedule over the next 28 days and returns
+  /// dates (formatted strings) where any occurrence overlaps with an
+  /// already-occupied time range. Capped at 5 results.
+  List<String> _getNewScheduleConflicts() {
+    if (_scheduleStartTime == null ||
+        _scheduleEndTime == null ||
+        _selectedWeekdays.isEmpty) return [];
+
+    final now = DateTime.now();
+    final horizon = now.add(const Duration(days: 28));
+    final occupied = _storage.getOccupiedTimeRanges(now, horizon);
+    final conflicts = <String>[];
+    DateTime day = DateTime(now.year, now.month, now.day);
+    while (!day.isAfter(horizon) && conflicts.length < 5) {
+      if (_selectedWeekdays.contains(day.weekday)) {
+        final slotStart = DateTime(day.year, day.month, day.day,
+            _scheduleStartTime!.hour, _scheduleStartTime!.minute);
+        final slotEnd = DateTime(day.year, day.month, day.day,
+            _scheduleEndTime!.hour, _scheduleEndTime!.minute);
+        for (final range in occupied) {
+          final rStart =
+              DateTime.tryParse(range['startTime'] as String? ?? '');
+          final rEnd = DateTime.tryParse(range['endTime'] as String? ?? '');
+          if (rStart == null || rEnd == null) continue;
+          if (slotStart.isBefore(rEnd) && slotEnd.isAfter(rStart)) {
+            conflicts.add(DateFormat('EEE, d MMM').format(slotStart));
+            break;
+          }
+        }
+      }
+      day = day.add(const Duration(days: 1));
+    }
+    return conflicts;
+  }
+
   Future<void> _addTaskToPlan() async {
     final l10n = AppLocalizations.of(context)!;
     // For Task type, require a fresh AI preview before adding.
@@ -1458,6 +1509,35 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
+            ),
+          );
+          return;
+        }
+
+        // Block add if any occurrence in next 28 days overlaps occupied blocks.
+        // Uses cached result from preview if available, otherwise runs fresh check.
+        final conflicts = _scheduleConflictDates.isNotEmpty
+            ? _scheduleConflictDates
+            : _getNewScheduleConflicts();
+        if (conflicts.isNotEmpty) {
+          final summary = conflicts.take(3).join(', ');
+          final more = conflicts.length > 3 ? ' +${conflicts.length - 3}' : '';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.event_busy, color: Colors.white, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                        'Không thể thêm: khung giờ đã bị chiếm ($summary$more)'),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
           );
           return;
