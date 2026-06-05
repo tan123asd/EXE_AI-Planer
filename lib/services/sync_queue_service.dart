@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'firestore_service.dart';
 
 /// Operation types that can be queued while offline.
-enum SyncOp { completeSession, updateStatus, deleteTask, deleteSession }
+enum SyncOp { completeSession, updateStatus, deleteTask, deleteSession, addTask }
 
 class SyncQueueService {
   static final SyncQueueService _instance = SyncQueueService._internal();
@@ -78,6 +78,9 @@ class SyncQueueService {
         'sessionIndex': sessionIndex,
       });
 
+  Future<void> enqueueAddTask(Map<String, dynamic> task) =>
+      enqueue({'op': 'addTask', 'task': task});
+
   // ─── Flush ───────────────────────────────────────────────────────────────────
 
   /// Processes all pending operations against Firestore in timestamp order.
@@ -113,7 +116,7 @@ class SyncQueueService {
     FirestoreService firestore,
   ) async {
     final op = entry['op'] as String;
-    final taskId = entry['taskId'] as String;
+    final taskId = (entry['taskId'] as String?) ?? '';
 
     switch (op) {
       case 'completeSession':
@@ -152,6 +155,11 @@ class SyncQueueService {
           task['sessions'] = sessions;
           await firestore.pushTask(task);
         }
+
+      case 'addTask':
+        final taskData = entry['task'] as Map<String, dynamic>?;
+        if (taskData == null) return;
+        await firestore.pushTask(taskData);
     }
   }
 }

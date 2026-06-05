@@ -4,6 +4,8 @@ import 'package:ai_study_planner/services/auth_service.dart';
 import 'package:ai_study_planner/services/storage_service.dart';
 import 'package:ai_study_planner/services/firestore_service.dart';
 import 'package:ai_study_planner/services/connectivity_service.dart';
+import 'package:ai_study_planner/services/subscription_service.dart';
+import 'package:ai_study_planner/services/user_profile_service.dart';
 import 'package:ai_study_planner/utils/constants.dart' as app_constants;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -153,19 +155,41 @@ class _LoginScreenState extends State<LoginScreen> {
         final email = user.email ?? '';
         final photoUrl = user.photoURL ?? '';
 
+        // If a different account is logging in, clear the previous user's data
+        // so bio/phone/tasks don't leak across accounts.
+        final lastUid = _storageService.getLastUid();
+        if (lastUid != null && lastUid != user.uid) {
+          await _storageService.clearAccountData();
+        }
+        await _storageService.saveLastUid(user.uid);
+
         await _storageService.saveUserName(displayName);
         await _storageService.saveUserEmail(email);
         await _storageService.saveUserPhotoUrl(photoUrl);
 
         // Initial sync: Firestore ↔ local (pull remote or push local if new account).
-        // Wrapped in its own try-catch so a sync failure never blocks navigation.
+        // 10-second timeout prevents hanging when Firestore is slow or offline.
         try {
           final prefs = await SharedPreferences.getInstance();
-          await FirestoreService().initialSync(prefs);
-          await ConnectivityService().syncNow();
+          await FirestoreService().initialSync(prefs)
+              .timeout(const Duration(seconds: 10));
+          await ConnectivityService().syncNow()
+              .timeout(const Duration(seconds: 5));
         } catch (_) {
-          // Sync failed — proceed to home. ConnectivityService will retry on reconnect.
+          // Sync failed or timed out — proceed to home. ConnectivityService will retry on reconnect.
         }
+        // Refresh subscription tier AFTER login so Firestore is queried
+        // with the correct UID. This ensures Pro users on a new device get
+        // the correct tier before HomeScreen renders.
+        try {
+          await SubscriptionService().init()
+              .timeout(const Duration(seconds: 5));
+        } catch (_) {
+          // Offline or timeout — fall back to cached tier.
+        }
+        // Re-init UserProfileService to reset its in-memory AI chat stats
+        // (avgDailyHours, planCount) that were cleared from SharedPreferences.
+        await UserProfileService().init();
       }
 
       if (userCredential != null && mounted) {

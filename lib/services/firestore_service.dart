@@ -40,6 +40,24 @@ class FirestoreService {
     return snap.data() as Map<String, dynamic>?;
   }
 
+  // ─── Subscription tier (server is source of truth) ─────────────────────────
+
+  /// Reads subscription_tier directly from Firestore. Returns null if offline or no data.
+  Future<String?> fetchSubscriptionTier() async {
+    final profile = await fetchProfile();
+    return profile?['subscription_tier'] as String?;
+  }
+
+  /// Writes subscription_tier to Firestore. Only call this from a verified payment callback.
+  Future<void> setSubscriptionTier(String tier) async {
+    final ref = _profileRef;
+    if (ref == null) return;
+    await ref.set(
+      {'subscription_tier': tier, 'updatedAt': FieldValue.serverTimestamp()},
+      SetOptions(merge: true),
+    );
+  }
+
   // ─── Tasks ──────────────────────────────────────────────────────────────────
 
   Future<void> pushTask(Map<String, dynamic> task) async {
@@ -199,9 +217,9 @@ class FirestoreService {
       'productivityHours': prefs.getString('productivity_hours') ?? '[]',
       'breakSettings': prefs.getString('break_settings') ?? '{}',
       'userProfile': prefs.getString('user_profile') ?? '{}',
+      // subscription_tier is intentionally excluded — managed only by SubscriptionService.
     };
     await pushProfile(data);
-    // Record the push timestamp locally
     await prefs.setString(
         'profile_updatedAt', DateTime.now().toUtc().toIso8601String());
   }
@@ -221,6 +239,11 @@ class FirestoreService {
     if (remote['userProfile'] != null) {
       prefs.setString('user_profile', remote['userProfile']);
     }
+    // Restore subscription tier from Firestore so switching accounts applies correct tier.
+    final tier = remote['subscription_tier'] as String?;
+    if (tier != null && _uid != null) {
+      prefs.setString('user_tier_$_uid', tier);
+    }
     final remoteTs = (remote['updatedAt'] as Timestamp?)?.toDate();
     if (remoteTs != null) {
       prefs.setString('profile_updatedAt', remoteTs.toUtc().toIso8601String());
@@ -229,14 +252,16 @@ class FirestoreService {
 
   Future<void> _syncTasks(SharedPreferences prefs) async {
     final remoteTasks = await fetchAllTasks();
+    final remoteIds = remoteTasks.map((t) => t['id']?.toString()).toSet();
+
+    final localJson = prefs.getString('custom_tasks');
+    final localTasks = localJson != null && localJson.isNotEmpty
+        ? (jsonDecode(localJson) as List).cast<Map<String, dynamic>>()
+        : <Map<String, dynamic>>[];
 
     if (remoteTasks.isEmpty) {
       // Firestore empty (new account or all remote tasks deleted) — push local if any
-      final localJson = prefs.getString('custom_tasks');
-      if (localJson != null && localJson.isNotEmpty) {
-        final local = (jsonDecode(localJson) as List).cast<Map<String, dynamic>>();
-        if (local.isNotEmpty) await pushAllTasks(local);
-      }
+      if (localTasks.isNotEmpty) await pushAllTasks(localTasks);
       return;
     }
 
@@ -246,7 +271,7 @@ class FirestoreService {
       final tsStr = t['updatedAt'] as String?;
       if (tsStr != null) {
         final ts = DateTime.tryParse(tsStr);
-        if (ts != null && (latestRemoteTs == null || ts.isAfter(latestRemoteTs!))) {
+        if (ts != null && (latestRemoteTs == null || ts.isAfter(latestRemoteTs))) {
           latestRemoteTs = ts;
         }
       }
@@ -257,25 +282,34 @@ class FirestoreService {
 
     if (localTs != null && latestRemoteTs != null && localTs.isAfter(latestRemoteTs)) {
       // Local was modified AFTER last remote update → local wins
-      final localJson = prefs.getString('custom_tasks');
-      final local = localJson != null && localJson.isNotEmpty
-          ? (jsonDecode(localJson) as List).cast<Map<String, dynamic>>()
-          : <Map<String, dynamic>>[];
-      if (local.isEmpty) {
+      if (localTasks.isEmpty) {
         // User deleted all tasks locally — batch-delete remote as well
         await deleteAllTasks();
       } else {
-        await pushAllTasks(local);
+        await pushAllTasks(localTasks);
       }
       return;
     }
 
-    // Remote wins (or no local timestamp) — pull remote down, strip updatedAt before storing
+    // Remote wins (or no local timestamp) — pull remote down.
+    // Also push any local tasks not present in Firestore (failed to push earlier).
     final tasksToStore = remoteTasks.map((t) {
       final copy = Map<String, dynamic>.from(t);
       copy.remove('updatedAt');
       return copy;
     }).toList();
+
+    final localOnlyTasks = localTasks
+        .where((t) {
+          final id = t['id']?.toString();
+          return id != null && id.isNotEmpty && !remoteIds.contains(id);
+        })
+        .toList();
+    if (localOnlyTasks.isNotEmpty) {
+      await pushAllTasks(localOnlyTasks);
+      tasksToStore.addAll(localOnlyTasks);
+    }
+
     await prefs.setString('custom_tasks', jsonEncode(tasksToStore));
     // Align local timestamp with remote so the next login doesn't flip back to local
     final tsToStore = latestRemoteTs?.toUtc().toIso8601String() ??

@@ -7,7 +7,6 @@ import '../services/storage_service.dart';
 import '../services/auth_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/notifications_screen.dart';
-import '../screens/settings_screen.dart';
 import '../models/scheduler_models.dart';
 import '../providers/language_provider.dart';
 import '../widgets/time_picker_12h.dart';
@@ -54,14 +53,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _saveProfile() async {
-    await _storage.saveUserName(_nameController.text);
-    await _storage.saveUserEmail(_emailController.text);
-    await _storage.saveUserPhone(_phoneController.text);
-    await _storage.saveUserBio(_bioController.text);
+    await _storage.saveUserNameWithSync(_nameController.text);
+    await _storage.saveUserPhoneWithSync(_phoneController.text);
+    await _storage.saveUserBioWithSync(_bioController.text);
+    // Email is from Google auth — never editable or re-saved here.
 
     setState(() {
       _isEditing = false;
     });
+
+    // Push to Firestore immediately (fire-and-forget — local is already saved).
+    _storage.pushProfileToFirestore().ignore();
 
     if (mounted) {
       final l10n = AppLocalizations.of(context)!;
@@ -277,21 +279,105 @@ class _ProfileScreenState extends State<ProfileScreen> {
               context: context,
               icon: Icons.person_outline,
               title: l10n.editProfile,
-              onTap: () {
-                setState(() {
-                  _isEditing = !_isEditing;
-                });
-                if (_isEditing) {
-                  Future.delayed(const Duration(milliseconds: 300), () {
-                    _scrollController.animateTo(
-                      _scrollController.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 500),
-                      curve: Curves.easeInOut,
-                    );
-                  });
-                }
-              },
+              onTap: () => setState(() => _isEditing = !_isEditing),
             ),
+            if (_isEditing) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  boxShadow: AppShadows.card,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.editProfileInfo,
+                      style: AppTextStyles.heading2,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _buildTextField(
+                      controller: _nameController,
+                      label: l10n.fullName,
+                      icon: Icons.person_outline,
+                      enabled: true,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _buildTextField(
+                      controller: _emailController,
+                      label: l10n.email,
+                      icon: Icons.email_outlined,
+                      enabled: false,
+                      keyboardType: TextInputType.emailAddress,
+                      suffixIcon: const Tooltip(
+                        message: 'Email từ tài khoản Google, không thể thay đổi',
+                        child: Icon(Icons.lock_outline, size: 18, color: AppColors.textSecondary),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _buildTextField(
+                      controller: _phoneController,
+                      label: l10n.phone,
+                      icon: Icons.phone_outlined,
+                      enabled: true,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _buildTextField(
+                      controller: _bioController,
+                      label: l10n.bio,
+                      icon: Icons.info_outline,
+                      enabled: true,
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _cancelEdit,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.textSecondary,
+                              side: const BorderSide(
+                                color: AppColors.textSecondary,
+                                width: 1,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.md),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: AppSpacing.md),
+                            ),
+                            child: Text(l10n.cancel),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _saveProfile,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.md),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: AppSpacing.md),
+                            ),
+                            child: Text(l10n.save),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
             _buildProfileOption(
               context: context,
               icon: Icons.notifications_outlined,
@@ -300,15 +386,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 context,
                 MaterialPageRoute(
                     builder: (_) => const NotificationsScreen()),
-              ),
-            ),
-            _buildProfileOption(
-              context: context,
-              icon: Icons.settings_outlined,
-              title: l10n.settings,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
               ),
             ),
             _buildProfileOption(
@@ -351,6 +428,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onPressed: () async {
                             Navigator.pop(context);
                             try {
+                              await StorageService().clearAccountData();
                               final authService = AuthService();
                               await authService.signOut();
                               if (mounted) {
@@ -396,105 +474,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Text(l10n.logout),
               ),
             ),
-
-            // Edit Profile Form (appears below when Edit Profile is tapped)
-            if (_isEditing) ...[
-              const SizedBox(height: AppSpacing.xl),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBackground,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  boxShadow: AppShadows.card,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.editProfileInfo,
-                      style: AppTextStyles.heading2,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-
-                    _buildTextField(
-                      controller: _nameController,
-                      label: l10n.fullName,
-                      icon: Icons.person_outline,
-                      enabled: true,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-
-                    _buildTextField(
-                      controller: _emailController,
-                      label: l10n.email,
-                      icon: Icons.email_outlined,
-                      enabled: true,
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-
-                    _buildTextField(
-                      controller: _phoneController,
-                      label: l10n.phone,
-                      icon: Icons.phone_outlined,
-                      enabled: true,
-                      keyboardType: TextInputType.phone,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-
-                    _buildTextField(
-                      controller: _bioController,
-                      label: l10n.bio,
-                      icon: Icons.info_outline,
-                      enabled: true,
-                      maxLines: 3,
-                    ),
-
-                    const SizedBox(height: AppSpacing.lg),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _cancelEdit,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.textSecondary,
-                              side: const BorderSide(
-                                color: AppColors.textSecondary,
-                                width: 1,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(AppRadius.md),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: AppSpacing.md),
-                            ),
-                            child: Text(l10n.cancel),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: _saveProfile,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(AppRadius.md),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: AppSpacing.md),
-                            ),
-                            child: Text(l10n.save),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
 
             const SizedBox(height: AppSpacing.xl),
           ],
@@ -653,6 +632,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required bool enabled,
     TextInputType? keyboardType,
     int maxLines = 1,
+    Widget? suffixIcon,
   }) {
     return TextField(
       controller: controller,
@@ -667,6 +647,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               enabled ? AppColors.textPrimary : AppColors.textSecondary,
         ),
         prefixIcon: Icon(icon, color: AppColors.primary),
+        suffixIcon: suffixIcon,
         filled: true,
         fillColor:
             enabled ? Colors.white : Colors.grey.withOpacity(0.1),

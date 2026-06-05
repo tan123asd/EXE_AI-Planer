@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/scheduler_models.dart';
+import 'rate_limit_service.dart';
+import 'subscription_service.dart';
 
 class AiServiceException implements Exception {
   final String message;
@@ -85,6 +87,9 @@ class AiService {
   static const _apiKey = String.fromEnvironment('OPENAI_API_KEY');
   static const _endpoint = 'https://api.openai.com/v1/chat/completions';
 
+  final _rateLimitService = RateLimitService();
+  final _subscriptionService = SubscriptionService();
+
   static String _formatDatetime(DateTime dt) {
     final local = dt.toLocal();
     return '${local.year.toString().padLeft(4, '0')}'
@@ -109,6 +114,8 @@ class AiService {
         'OPENAI_API_KEY is not set. Build with --dart-define=OPENAI_API_KEY=<key>.',
       );
     }
+
+    await _rateLimitService.checkAndRecord(_subscriptionService.currentTier);
 
     final userMessage = 'Goal: $taskName\n'
         'Description: ${notes.isNotEmpty ? notes : taskName}\n'

@@ -9,6 +9,7 @@ import 'firebase_options.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/storage_service.dart';
+import 'services/subscription_service.dart';
 import 'services/user_profile_service.dart';
 import 'services/notification_service.dart';
 import 'services/sync_queue_service.dart';
@@ -25,7 +26,19 @@ void main() async {
   );
 
   await StorageService().init();
+
+  // If user is already logged in (cold start) but user_name was cleared
+  // (e.g. after a previous logout), restore it from Firebase Auth.
+  final fbUser = FirebaseAuth.instance.currentUser;
+  if (fbUser != null && StorageService().getUserName().isEmpty) {
+    final name = fbUser.displayName?.trim().isNotEmpty == true
+        ? fbUser.displayName!.trim()
+        : (fbUser.email?.split('@').first ?? '');
+    if (name.isNotEmpty) await StorageService().saveUserName(name);
+  }
+
   await UserProfileService().init();
+  await SubscriptionService().init();
   await SyncQueueService().init();
   ConnectivityService().init();
   await NotificationService().init();

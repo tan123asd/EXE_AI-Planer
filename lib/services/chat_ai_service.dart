@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/chat_models.dart';
 import 'context_compressor.dart';
+import 'rate_limit_service.dart';
+import 'subscription_service.dart';
 import 'user_profile_service.dart';
 
 class ChatAiService {
@@ -9,6 +11,8 @@ class ChatAiService {
   static const _endpoint = 'https://api.openai.com/v1/chat/completions';
 
   final _compressor = ContextCompressor();
+  final _rateLimitService = RateLimitService();
+  final _subscriptionService = SubscriptionService();
 
   static String _buildSystemPrompt(
     ConversationPhase phase, {
@@ -435,6 +439,12 @@ A study plan has been generated and displayed to the user. Your role:
         content: 'OpenAI API key not configured. Please run the app with --dart-define=OPENAI_API_KEY=sk-...',
       );
     }
+
+    if (!_subscriptionService.isPro) {
+      throw const ProFeatureException();
+    }
+
+    await _rateLimitService.checkAndRecord(_subscriptionService.currentTier);
 
     final ctxSummary = _buildContextSummary(ctx);
     final profileHint = UserProfileService().toPromptString();

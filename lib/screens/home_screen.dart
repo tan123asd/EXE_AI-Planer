@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ai_study_planner/l10n/app_localizations.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../models/task.dart';
 import '../utils/constants.dart';
@@ -9,6 +10,8 @@ import '../widgets/priority_task_card.dart';
 import '../widgets/status_task_card.dart';
 import '../widgets/performance_tracking_card.dart';
 import '../services/storage_service.dart';
+import '../services/subscription_service.dart';
+import '../widgets/upgrade_dialog.dart';
 import 'new_task_input_screen.dart';
 import 'tasks_screen.dart';
 import 'calendar_screen.dart';
@@ -24,9 +27,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  int _calendarVersion = 0;
   final StorageService _storage = StorageService();
-  late String _userName;
-  DateTime _selectedDate = DateTime.now();
   
   // Current tasks to display
   List<Map<String, dynamic>> _todayTasks = [];
@@ -42,13 +44,26 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Guard: redirect to login if no authenticated user.
+    if (FirebaseAuth.instance.currentUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.of(context).pushReplacementNamed('/login');
+      });
+      return;
+    }
     _loadData();
   }
 
   void _loadData() {
-    // Load user name
-    _userName = _storage.getUserName();
-    
+    // Ensure the user's name is cached in storage for the profile screen.
+    if (_storage.getUserName().isEmpty) {
+      final fbUser = FirebaseAuth.instance.currentUser;
+      final name = fbUser?.displayName?.trim().isNotEmpty == true
+          ? fbUser!.displayName!.trim()
+          : (fbUser?.email?.split('@').first ?? '');
+      if (name.isNotEmpty) _storage.saveUserName(name);
+    }
+
     setState(() {
       // Load custom tasks from storage
       final allTasks = _storage.getCustomTasks();
@@ -409,7 +424,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _getGreetingName() {
-    final name = _userName.trim();
+    String name = _storage.getUserName().trim();
+    if (name.isEmpty) {
+      final fbUser = FirebaseAuth.instance.currentUser;
+      name = fbUser?.displayName?.trim().isNotEmpty == true
+          ? fbUser!.displayName!.trim()
+          : (fbUser?.email?.split('@').first ?? '');
+    }
     return name.isEmpty ? 'Student' : name;
   }
 
@@ -1150,142 +1171,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ],
             const SizedBox(height: AppSpacing.xl),
-            
-            // Recurring Schedules Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppColors.primary.withOpacity(0.15),
-                        AppColors.primary.withOpacity(0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.event_repeat_rounded,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l10n.recurringSchedules,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        l10n.weeklyRoutines,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textSecondary.withOpacity(0.7),
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            
-            // Recurring Schedule Cards - Filter by taskType == 'Schedules'
-            if (_todayTasks.where((task) => task['taskType'] == 'Schedules').isEmpty) ...[
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.primary.withOpacity(0.03),
-                      AppColors.primary.withOpacity(0.01),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: AppColors.primary.withOpacity(0.1),
-                    width: 1.5,
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.calendar_month_rounded,
-                        size: 32,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      l10n.noRecurringSchedules,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.addWeeklySchedules,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary.withOpacity(0.7),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ] else ...[
-              // Show recurring schedules
-              for (var task in _todayTasks.where(_isRecurringType)) ...[
-                PriorityTaskCard(
-                  title: task['name'] ?? 'Untitled Schedule',
-                  subtitle: _formatScheduleSubtitle(task, l10n),
-                  bestSlot: _formatTimeRange(task),
-                  subject: _getSubjectLabel(task),
-                  accentColor: _getSubjectColor(task),
-                  priority: (task['taskType'] ?? 'Schedule').toString(),
-                  onTap: null,
-                ),
-              ],
-            ],
-            const SizedBox(height: AppSpacing.xl),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(IconData icon, String label, int index) {
+  Widget _buildNavItem(IconData icon, String label, int index, {VoidCallback? onTapOverride}) {
     final isSelected = _currentIndex == index;
     return Expanded(
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {
+          onTap: onTapOverride ?? () {
             setState(() {
               _currentIndex = index;
             });
@@ -1349,7 +1247,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final screens = [
       _buildHomeContent(l10n),
       const ChatPlannerScreen(),
-      const CalendarScreen(),
+      CalendarScreen(key: ValueKey(_calendarVersion)),
       const ProfileScreen(),
     ];
 
@@ -1404,6 +1302,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         transitionDuration: const Duration(milliseconds: 400),
                       ),
                     );
+                    // Refresh both home data and calendar after a task is added.
+                    setState(() => _calendarVersion++);
                     _loadData();
                   },
                   customBorder: const CircleBorder(),
@@ -1443,8 +1343,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildNavItem(Icons.home_rounded, l10n.navHome, 0),
-                        _buildNavItem(Icons.chat_bubble_outline_rounded, l10n.navChat, 1),
+                        _buildNavItem(
+                          Icons.home_rounded,
+                          l10n.navHome,
+                          0,
+                          onTapOverride: () {
+                            setState(() => _currentIndex = 0);
+                            _loadData();
+                          },
+                        ),
+                        _buildNavItem(
+                          Icons.chat_bubble_outline_rounded,
+                          l10n.navChat,
+                          1,
+                          onTapOverride: () {
+                            if (SubscriptionService().isPro) {
+                              setState(() => _currentIndex = 1);
+                            } else {
+                              UpgradeDialog.show(context);
+                            }
+                          },
+                        ),
                         const SizedBox(width: 48),
                         _buildNavItem(Icons.calendar_month, l10n.navCalendar, 2),
                         _buildNavItem(Icons.person, l10n.navProfile, 3),

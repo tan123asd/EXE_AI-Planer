@@ -4,9 +4,12 @@ import '../models/chat_models.dart';
 import '../models/scheduler_models.dart';
 import '../services/chat_ai_service.dart';
 import '../services/chat_planner_service.dart';
+import '../services/rate_limit_service.dart';
 import '../services/storage_service.dart';
+import '../services/subscription_service.dart';
 import '../services/tool_guardrails.dart';
 import '../services/user_profile_service.dart';
+import '../widgets/upgrade_dialog.dart';
 import '../utils/constants.dart';
 import '../widgets/chat_message_bubble.dart';
 import '../widgets/chat_plan_preview_card.dart';
@@ -182,6 +185,22 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
         scheduleContext: scheduleCtx,
       );
       await _dispatchToolCall(toolCall);
+    } on ProFeatureException {
+      setState(() => _isLoading = false);
+      _persistState();
+      _scrollToBottom();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) UpgradeDialog.show(context);
+      });
+      return;
+    } on RateLimitException catch (e) {
+      final resetHour = DateTime.now().add(Duration(seconds: e.secondsUntilReset));
+      final hh = resetHour.hour.toString().padLeft(2, '0');
+      final mm = resetHour.minute.toString().padLeft(2, '0');
+      _addAiMessage(
+        'Bạn đã dùng hết 100 lượt AI hôm nay. '
+        'Thử lại sau $hh:$mm (reset lúc 00:00).',
+      );
     } catch (e) {
       _addAiMessage(_t(
         'Something went wrong. Please check your connection and try again.',

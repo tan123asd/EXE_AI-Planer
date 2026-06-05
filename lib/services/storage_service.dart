@@ -38,7 +38,7 @@ class StorageService {
   }
 
   String getUserName() {
-    return _prefs?.getString(_userNameKey) ?? 'Tan';
+    return _prefs?.getString(_userNameKey) ?? '';
   }
 
   Future<void> saveUserEmail(String email) async {
@@ -862,5 +862,53 @@ class StorageService {
       await SyncQueueService().enqueueDeleteSession(
           taskId: taskId, sessionIndex: sessionIndex);
     }
+  }
+
+  // ─── Account identity ─────────────────────────────────────────────────────
+
+  String? getLastUid() => _prefs?.getString('last_uid');
+
+  Future<void> saveLastUid(String uid) async {
+    await _prefs?.setString('last_uid', uid);
+  }
+
+  Future<void> clearAccountData() async {
+    final keysToRemove = [
+      _userNameKey,
+      _userEmailKey,
+      _userPhotoUrlKey,
+      _userPhoneKey,
+      _userBioKey,
+      _customTasksKey,
+      _customTasksUpdatedAtKey,
+      _scheduleKey,
+      _tasksKey,
+      _completedTasksKey,
+      _inProgressTasksKey,
+      _chatHistoryKey,
+      _chatContextKey,
+      'last_uid',
+      'profile_updatedAt',
+      'productivity_hours',
+      'break_settings',
+      'user_profile',
+    ];
+    for (final key in keysToRemove) {
+      await _prefs?.remove(key);
+    }
+  }
+
+  Future<void> pushProfileToFirestore() async {
+    final data = <String, dynamic>{
+      'name': _prefs?.getString(_userNameKey) ?? '',
+      'email': _prefs?.getString(_userEmailKey) ?? '',
+      'photoUrl': _prefs?.getString(_userPhotoUrlKey) ?? '',
+      'phone': _prefs?.getString(_userPhoneKey) ?? '',
+      'bio': _prefs?.getString(_userBioKey) ?? '',
+      'productivityHours': _prefs?.getString('productivity_hours') ?? '[]',
+      'breakSettings': _prefs?.getString('break_settings') ?? '{}',
+      'userProfile': _prefs?.getString('user_profile') ?? '{}',
+    };
+    await FirestoreService().pushProfile(data);
   }
 }
