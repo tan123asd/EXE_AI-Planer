@@ -324,7 +324,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
             final s = e.value;
             final datePart = DateFormat('EEE, MMM d').format(s.startTime);
             final timePart =
-                '${_formatTimeWith24H(s.startTime)} – ${_formatTimeWith24H(s.endTime, isRangeEnd: true)}';
+                '${_formatTimeWith12H(s.startTime)} – ${_formatTimeWith12H(s.endTime, isRangeEnd: true)}';
             if (slots.length == 1) return '$datePart • $timePart';
             return 'S${idx + 1}: $datePart • $timePart';
           }).join('\n');
@@ -663,7 +663,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       final end = DateTime.parse(s['endTime'] as String);
       final datePart = DateFormat('EEE, MMM d').format(start);
       final timePart =
-          '${_formatTimeWith24H(start)} – ${_formatTimeWith24H(end, isRangeEnd: true)}';
+          '${_formatTimeWith12H(start)} – ${_formatTimeWith12H(end, isRangeEnd: true)}';
+
       if (sessions.length == 1) return '$datePart • $timePart';
       return 'S${e.key + 1}: $datePart • $timePart';
     }).join('\n');
@@ -736,7 +737,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           final end = DateTime.parse(s['endTime'] as String);
           final datePart = DateFormat('EEE, MMM d').format(start);
           final timePart =
-              '${_formatTimeWith24H(start)} – ${_formatTimeWith24H(end, isRangeEnd: true)}';
+              '${_formatTimeWith12H(start)} – ${_formatTimeWith12H(end, isRangeEnd: true)}';
+
           final isSessionSel =
               _selectedSessionsPerOption[index]?.contains(sIdx) ?? false;
 
@@ -1331,7 +1333,28 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 
+
+  /// Formats a DateTime as a 12-hour time string with AM/PM, e.g. "2:30 PM".
+  /// If [isRangeEnd] and time is exactly midnight (00:00), show "24:00".
+  String _formatTimeWith12H(DateTime time, {bool isRangeEnd = false}) {
+    if (isRangeEnd && time.hour == 0 && time.minute == 0) {
+      return '24:00';
+    }
+
+    final hour24 = time.hour;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+    final suffix = hour24 < 12 ? 'AM' : 'PM';
+    // Requirement: only show AM/PM for endTime.
+    final showSuffix = isRangeEnd;
+    return showSuffix ? '$hour12:$minute $suffix' : '$hour12:$minute';
+  }
+
+
+
+
   /// Builds the unified "Selected Time" list: AI sessions from checked options + custom slots.
+
   /// Each map has startTime, endTime, duration, and optionally _optionIndex/_sessionIndexInOption (AI) or _customIndex (custom).
   List<Map<String, dynamic>> _getSelectedTimeSlots() {
     final list = <Map<String, dynamic>>[];

@@ -34,7 +34,19 @@ class SchedulerService {
 
     for (final task in sortedTasks) {
       int durationLeft = (task.duration * 60).round();
-      final int minBlockMin = (task.minBlock * 60).round();
+
+      // Giới hạn min_block/session khi deadline gấp để tăng khả năng fit.
+      // - Nếu deadline còn < 48h: ép min_block <= 1.0h (60 phút)
+      // - Nếu deadline còn < 24h: ép min_block <= 0.5h (30 phút)
+      final int minutesUntilDeadline =
+          config.deadline.difference(DateTime.now()).inMinutes;
+      int minBlockMin = (task.minBlock * 60).round();
+      if (minutesUntilDeadline < 24 * 60) {
+        minBlockMin = minBlockMin > 30 ? 30 : minBlockMin;
+      } else if (minutesUntilDeadline < 48 * 60) {
+        minBlockMin = minBlockMin > 60 ? 60 : minBlockMin;
+      }
+
       DateTime sessionSearchFrom = subtaskSearchFrom;
 
       int sessionIdx = 0;
@@ -67,8 +79,17 @@ class SchedulerService {
 
         final allocate = durationLeft.clamp(minBlockMin, best.durationMinutes);
 
-        // Snap allocation to minBlock granularity (round up to next minBlock multiple)
-        final sessions = (allocate / minBlockMin).ceil();
+        // Snap allocation to minBlock granularity.
+        // Deadline gấp: dùng floor để giảm trường hợp bị ceil làm vượt thời gian.
+        final isDeadlineTight =
+            config.deadline.difference(DateTime.now()).inHours < 48;
+        final sessions = (allocate / minBlockMin).floor();
+        if (sessions <= 0) {
+          // luôn đảm bảo >= 1 min_block khi vẫn còn durationLeft
+          // (để tránh rơi vào tình trạng sessions=0)
+          // eslint-disable-next-line: avoid-returning-widgets
+        }
+
         int actualAlloc = (sessions * minBlockMin).clamp(minBlockMin, best.durationMinutes);
 
         // Cap to remaining daily budget.
@@ -94,13 +115,21 @@ class SchedulerService {
           endTime: slotEnd,
         ));
         hardOccupied.add(_Range(slotStart, slotEnd));
-        // Insert a mandatory break so the next session doesn't start immediately.
-        final breakMin = _breakAfterSession(actualAlloc, task.focusLevel);
+        // Deadline-gấp: nếu deadline còn < 48h thì bỏ break để tăng khả năng fit.
+        // (Lưu ý: block 22:30–06:00 vẫn là hard exclusion.)
+        final breakMin =
+            isDeadlineTight ? 0 : _breakAfterSession(actualAlloc, task.focusLevel);
+
+
+
         if (breakMin > 0) {
           hardOccupied.add(_Range(slotEnd, slotEnd.add(Duration(minutes: breakMin))));
         }
+
         // Advance within-subtask cursor past this session and its break.
         sessionSearchFrom = slotEnd.add(Duration(minutes: breakMin));
+
+
         durationLeft -= actualAlloc;
         sessionIdx++;
 
