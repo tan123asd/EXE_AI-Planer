@@ -23,6 +23,7 @@ dependencies:
   google_sign_in: ^6.0.0
   flutter_local_notifications: ^17.2.2
   timezone: ^0.9.4
+  flutter_timezone: ^3.0.0
   cloud_firestore: ^5.0.0
   connectivity_plus: ^6.0.0
 

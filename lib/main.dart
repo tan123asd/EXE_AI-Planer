@@ -41,8 +41,12 @@ void main() async {
   await SubscriptionService().init();
   await SyncQueueService().init();
   ConnectivityService().init();
-  await NotificationService().init();
-  await NotificationService().scheduleAllNotifications();
+  try {
+    await NotificationService().init();
+    await NotificationService().scheduleAllNotifications();
+  } catch (_) {
+    // Notification init failure must not block app startup.
+  }
 
   final languageProvider = LanguageProvider();
   await languageProvider.load();

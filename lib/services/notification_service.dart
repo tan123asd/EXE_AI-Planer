@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'storage_service.dart';
@@ -29,6 +30,13 @@ class NotificationService {
 
   Future<void> init() async {
     tz_data.initializeTimeZones();
+    try {
+      final localTz = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(localTz));
+    } catch (_) {
+      // Falls back to UTC if timezone cannot be determined — notifications
+      // will still fire, just at UTC-offset time.
+    }
 
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings(
@@ -47,7 +55,11 @@ class NotificationService {
             AndroidFlutterLocalNotificationsPlugin>();
     await androidPlugin?.createNotificationChannel(_channelSession);
     await androidPlugin?.createNotificationChannel(_channelOverdue);
-    await androidPlugin?.requestNotificationsPermission();
+    try {
+      await androidPlugin?.requestNotificationsPermission();
+    } catch (_) {
+      // Permission request may fail in some environments; non-fatal.
+    }
   }
 
   Future<void> setEnabled(bool value) async {
@@ -103,6 +115,7 @@ class NotificationService {
 
   Future<void> scheduleAllNotifications() async {
     if (!enabled) return;
+    try {
     await _plugin.cancelAll();
 
     final tasks = StorageService().getCustomTasks();
@@ -187,6 +200,9 @@ class NotificationService {
           ),
         ),
       );
+    }
+    } catch (_) {
+      // Notification scheduling failure must not crash the app.
     }
   }
 
