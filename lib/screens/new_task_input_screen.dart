@@ -364,6 +364,16 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         _selectedSuggestionIndex = null;
         _selectedSuggestionIndices.clear();
         _selectedSessionsPerOption.clear();
+
+        // Auto-tick: tick ALL AI suggested options and ALL sessions inside each option (Task UX)
+        // Keeps it consistent with _getSelectedTimeSlots() used by _addTaskToPlan().
+        for (int optIdx = 0; optIdx < _aiSuggestedSessionGroups.length; optIdx++) {
+          final sessionsCount = _aiSuggestedSessionGroups[optIdx].length;
+          if (sessionsCount <= 0) continue;
+          _selectedSuggestionIndices.add(optIdx);
+          _selectedSessionsPerOption[optIdx] = Set.from(List.generate(sessionsCount, (i) => i));
+        }
+
         if (_aiSuggestedStartTimes.isNotEmpty && !_isDeadlineManuallySet) {
           final first = _aiSuggestedStartTimes.first;
           _deadline =
@@ -2936,8 +2946,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   ),
                                 );
                               }).toList(),
-                              // Create your own slot (Task & Activity)
-                              if (_taskType == 'Task' || _taskType == 'Activity') ...[
+                              // Create your own slot (Task) - removed per UX request (keep for Activity)
+                              if (_taskType == 'Activity') ...[
                                 const SizedBox(height: 20),
                                 Text(
                                   l10n.createYourOwnSlot,
@@ -3183,99 +3193,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   ],
                                 ),
                               ],
-                              // Selected Time (Task & Activity)
-                              if ((_taskType == 'Task' || _taskType == 'Activity') && _getSelectedTimeSlots().isNotEmpty) ...[
-                                const SizedBox(height: 20),
-                                Text(
-                                  l10n.selectedTime,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                ..._getSelectedTimeSlots().asMap().entries.map((entry) {
-                                  final i = entry.key;
-                                  final m = entry.value;
-                                  final startStr = m['startTime'];
-                                  final endStr = m['endTime'];
-                                  DateTime start;
-                                  DateTime end;
-                                  try {
-                                    start = startStr is DateTime ? startStr : DateTime.parse(startStr as String);
-                                    end = endStr is DateTime ? endStr : DateTime.parse(endStr as String);
-                                  } catch (_) {
-                                    start = DateTime.now();
-                                    end = start.add(const Duration(hours: 1));
-                                  }
-                                  final optionIndex = m['_optionIndex'] as int?;
-                                  final sessionIndexInOption = m['_sessionIndexInOption'] as int?;
-                                  final customIndex = m['_customIndex'] as int?;
-                                  final customTaskName = customIndex != null
-                                      ? _customSlots[customIndex]['taskName'] as String?
-                                      : null;
-                                  return Container(
-                                    margin: const EdgeInsets.only(bottom: 6),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: Colors.grey.shade200),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              if (customTaskName != null && customTaskName.isNotEmpty)
-                                                Text(
-                                                  customTaskName,
-                                                  style: const TextStyle(
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: AppColors.textPrimary,
-                                                  ),
-                                                ),
-                                              Text(
-                                                '${DateFormat('d/M/yyyy').format(start)}  ${_formatTimeWith24H(start)} – ${_formatTimeWith24H(end, isRangeEnd: true)}',
-                                                style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        GestureDetector(
-                                          onTap: () {
-                                            setState(() {
-                                              if (customIndex != null) {
-                                                _customSlots.removeAt(customIndex);
-                                              } else if (optionIndex != null && sessionIndexInOption != null) {
-                                                if (_editedSessionGroups.length > optionIndex) {
-                                                  _editedSessionGroups[optionIndex].removeAt(sessionIndexInOption);
-                                                  _selectedSessionsPerOption[optionIndex]?.remove(sessionIndexInOption);
-                                                  if (_editedSessionGroups[optionIndex].isEmpty) {
-                                                    _selectedSuggestionIndices.remove(optionIndex);
-                                                    _selectedSessionsPerOption.remove(optionIndex);
-                                                  }
-                                                }
-                                              }
-                                            });
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(6),
-                                            child: Icon(
-                                              Icons.cancel_outlined,
-                                              size: 20,
-                                              color: const Color(0xFFD4A20A),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }),
-                              ],
+
                             ],
                           ),
                         ),
