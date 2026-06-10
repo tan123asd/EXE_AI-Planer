@@ -117,6 +117,28 @@ class _AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<_AuthGate> {
   bool _isSigningInSilently = false;
+  bool _didTriggerSilentSignIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Trigger silent sign-in once on app start; prevents rebuild-triggered loops.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _trySilentSignInOnce();
+    });
+  }
+
+  void _trySilentSignInOnce() async {
+    if (_isSigningInSilently || _didTriggerSilentSignIn) return;
+    _didTriggerSilentSignIn = true;
+    if (!mounted) return;
+
+    setState(() => _isSigningInSilently = true);
+    await AuthService().signInSilently();
+    if (!mounted) return;
+    setState(() => _isSigningInSilently = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -134,21 +156,10 @@ class _AuthGateState extends State<_AuthGate> {
           return const HomeScreen();
         }
 
-        // Auth state became null — try silent sign-in before showing login screen.
-        // This recovers from Android Doze/battery-opt blocking the token refresh.
-        _trySilentSignIn();
+        // If still signed out after silent sign-in attempt, show login.
         return const LoginScreen();
       },
     );
   }
-
-  void _trySilentSignIn() {
-    if (_isSigningInSilently) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      setState(() => _isSigningInSilently = true);
-      await AuthService().signInSilently();
-      if (mounted) setState(() => _isSigningInSilently = false);
-    });
-  }
 }
+

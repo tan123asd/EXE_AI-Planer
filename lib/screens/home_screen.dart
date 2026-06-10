@@ -46,13 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Guard: redirect to login if no authenticated user.
-    if (FirebaseAuth.instance.currentUser == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.of(context).pushReplacementNamed('/login');
-      });
-      return;
-    }
+    // Auth navigation is handled by _AuthGate in main.dart.
     _loadData();
   }
 
