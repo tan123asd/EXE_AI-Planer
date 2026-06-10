@@ -1451,6 +1451,31 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
       return;
     }
 
+    // For Task type, require at least one time slot selected (mirrors Activity validation).
+    if (_taskType == 'Task' &&
+        _aiSuggestedSessionGroups.isNotEmpty &&
+        _getSelectedTimeSlots().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(Icons.warning, color: Colors.white, size: 20),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text('Please select at least one time slot or add your own'),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+      return;
+    }
+
     // 🔧 Validation for Schedules & Activities (recurring)
     if (_taskType == 'Schedules' || _taskType == 'Activity') {
       if (_selectedWeekdays.isEmpty) {
@@ -1979,6 +2004,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _taskNameController,
+                          textInputAction: TextInputAction.next,
                           decoration: InputDecoration(
                             hintText: l10n.hintTaskTitle,
                             hintStyle: TextStyle(
@@ -2022,6 +2048,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                           TextFormField(
                             controller: _notesController,
                             maxLines: 4,
+                            textInputAction: TextInputAction.done,
+                            onEditingComplete: () => FocusScope.of(context).unfocus(),
                             decoration: InputDecoration(
                               hintText: l10n.hintDescription,
                               hintStyle: const TextStyle(
@@ -2411,6 +2439,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                           TextFormField(
                             controller: _activityDurationController,
                             keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.done,
+                            onEditingComplete: () => FocusScope.of(context).unfocus(),
                             decoration: InputDecoration(
                               hintText: l10n.hintDurationMinutes,
                               prefixIcon: const Icon(Icons.timer_outlined),
@@ -2927,6 +2957,8 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   ),
                                   child: TextField(
                                     controller: _customSubtaskNameController,
+                                    textInputAction: TextInputAction.done,
+                                    onEditingComplete: () => FocusScope.of(context).unfocus(),
                                     decoration: InputDecoration(
                                       hintText: l10n.hintSubtaskName,
                                       hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),

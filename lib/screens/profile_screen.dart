@@ -639,6 +639,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       enabled: enabled,
       keyboardType: keyboardType,
       maxLines: maxLines,
+      textInputAction: TextInputAction.done,
+      onEditingComplete: () => FocusScope.of(context).unfocus(),
       style: AppTextStyles.body,
       decoration: InputDecoration(
         labelText: label,

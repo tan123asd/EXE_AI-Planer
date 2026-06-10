@@ -139,6 +139,7 @@ class _TimePicker12hDialogState extends State<_TimePicker12hDialog> {
               focusNode: focus,
               textAlign: TextAlign.center,
               keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
                 LengthLimitingTextInputFormatter(2),

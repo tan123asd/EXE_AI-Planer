@@ -1033,6 +1033,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
               maxLines: 3,
               minLines: 1,
               textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.send,
               onSubmitted: _sendMessage,
               decoration: InputDecoration(
                 hintText: AppLocalizations.of(context)!.chatPlaceholder,

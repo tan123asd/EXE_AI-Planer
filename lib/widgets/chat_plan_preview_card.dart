@@ -418,6 +418,8 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
             ),
             child: TextField(
               controller: _customSubtaskNameController,
+              textInputAction: TextInputAction.done,
+              onEditingComplete: () => FocusScope.of(context).unfocus(),
               decoration: const InputDecoration(
                 hintText: 'Subtask name',
                 hintStyle: TextStyle(fontSize: 13, color: AppColors.textSecondary),

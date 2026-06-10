@@ -52,6 +52,23 @@ class AuthService {
     }
   }
 
+  /// Silently restores the Firebase session using the cached Google account.
+  /// Returns null if no cached Google account is available (user must log in manually).
+  Future<UserCredential?> signInSilently() async {
+    try {
+      final googleUser = await _googleSignIn.signInSilently();
+      if (googleUser == null) return null;
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      return await _firebaseAuth.signInWithCredential(credential);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Sign out
   Future<void> signOut() async {
     try {

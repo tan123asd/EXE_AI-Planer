@@ -13,6 +13,7 @@ import 'services/subscription_service.dart';
 import 'services/user_profile_service.dart';
 import 'services/notification_service.dart';
 import 'services/sync_queue_service.dart';
+import 'services/auth_service.dart';
 import 'services/connectivity_service.dart';
 import 'providers/theme_provider.dart';
 import 'providers/language_provider.dart';
@@ -98,26 +99,56 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/login': (context) => const LoginScreen(),
       },
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          // While checking auth state
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
-          }
-
-          // If user is logged in, show HomeScreen, otherwise show LoginScreen
-          if (snapshot.hasData && snapshot.data != null) {
-            return const HomeScreen();
-          } else {
-            return const LoginScreen();
-          }
-        },
-      ),
+      home: const _AuthGate(),
     );
+  }
+}
+
+/// Listens to Firebase auth state. When the state becomes null (e.g. due to
+/// Android Doze killing the background token refresh), tries a silent Google
+/// sign-in before falling back to the login screen. This prevents spurious
+/// logouts caused by temporary token refresh failures.
+class _AuthGate extends StatefulWidget {
+  const _AuthGate({Key? key}) : super(key: key);
+
+  @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  bool _isSigningInSilently = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting ||
+            _isSigningInSilently) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasData && snapshot.data != null) {
+          return const HomeScreen();
+        }
+
+        // Auth state became null — try silent sign-in before showing login screen.
+        // This recovers from Android Doze/battery-opt blocking the token refresh.
+        _trySilentSignIn();
+        return const LoginScreen();
+      },
+    );
+  }
+
+  void _trySilentSignIn() {
+    if (_isSigningInSilently) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      setState(() => _isSigningInSilently = true);
+      await AuthService().signInSilently();
+      if (mounted) setState(() => _isSigningInSilently = false);
+    });
   }
 }

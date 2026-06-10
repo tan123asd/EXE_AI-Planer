@@ -46,18 +46,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 60),
                 child: Column(
                   children: [
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: app_constants.AppColors.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.school,
-                        size: 60,
-                        color: Colors.white,
-                      ),
+                    Image.asset(
+                      'assets/logo.png',
+                      width: 140,
+                      height: 140,
                     ),
                     const SizedBox(height: 30),
                     Text(
