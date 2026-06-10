@@ -305,7 +305,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sectionEndDateOptional => 'End Date (Optional)';
 
   @override
-  String get sectionDuration => 'Duration (minutes)';
+  String get sectionDuration => 'Duration';
 
   @override
   String get sectionDailyTimeLimit => 'Daily Time Limit';

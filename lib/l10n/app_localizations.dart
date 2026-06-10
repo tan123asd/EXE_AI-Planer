@@ -659,7 +659,7 @@ abstract class AppLocalizations {
   /// No description provided for @sectionDuration.
   ///
   /// In en, this message translates to:
-  /// **'Duration (minutes)'**
+  /// **'Duration'**
   String get sectionDuration;
 
   /// No description provided for @sectionDailyTimeLimit.

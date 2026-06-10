@@ -130,7 +130,7 @@
   "sectionStartTime": "Start time",
   "sectionEndTime": "End time",
   "sectionEndDateOptional": "End Date (Optional)",
-  "sectionDuration": "Duration (minutes)",
+  "sectionDuration": "Duration",
   "sectionDailyTimeLimit": "Daily Time Limit",
   "sectionDates": "Dates",
   "sectionAiTimePlanning": "AI Time Planning",

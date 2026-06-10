@@ -8,7 +8,9 @@ import '../services/scheduler_service.dart';
 import '../services/notification_service.dart';
 import '../models/scheduler_models.dart';
 import '../widgets/time_picker_12h.dart';
+import '../widgets/duration_picker_hrs_mins.dart';
 import 'package:intl/intl.dart';
+
 
 class NewTaskInputScreen extends StatefulWidget {
   const NewTaskInputScreen({Key? key}) : super(key: key);
@@ -1311,6 +1313,13 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
     _generateAIEstimate();
   }
 
+  String _formatDurationHrsMins(int totalMinutes) {
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (minutes == 0) return '${hours}h';
+    return '${hours}h ${minutes}m';
+  }
+
   // 24h formatter. If range ends at midnight, show 24:00.
   String _formatTimeWith24H(DateTime time, {bool isRangeEnd = false}) {
     if (isRangeEnd && time.hour == 0 && time.minute == 0) {
@@ -2446,27 +2455,71 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                         children: [
                           _buildSectionLabel(l10n.sectionDuration, Icons.timelapse),
                           const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _activityDurationController,
-                            keyboardType: TextInputType.number,
-                            textInputAction: TextInputAction.done,
-                            onEditingComplete: () => FocusScope.of(context).unfocus(),
-                            decoration: InputDecoration(
-                              hintText: l10n.hintDurationMinutes,
-                              prefixIcon: const Icon(Icons.timer_outlined),
-                              filled: true,
-                              fillColor: AppColors.background,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                            onChanged: (value) {
-                              final parsed = int.tryParse(value);
+                          InkWell(
+                            onTap: () async {
+                              final current = _activityDurationMinutes ?? 60;
+                              final pickedMinutes = await showDurationPickerHrsMins(
+                                context,
+                                initialMinutes: current,
+                                maxHours: 12,
+                                minuteStep: 5,
+                                helpText: l10n.sectionDuration,
+                              );
+                              if (pickedMinutes == null) return;
                               setState(() {
-                                _activityDurationMinutes = parsed;
+                                _activityDurationMinutes = pickedMinutes;
+                                _activityDurationController.text = '';
+                                _invalidateAIPreviewState();
                               });
                             },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _activityDurationMinutes != null
+                                      ? AppColors.primary.withOpacity(0.3)
+                                      : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.timelapse,
+                                    color: _activityDurationMinutes != null
+                                        ? AppColors.primary
+                                        : AppColors.textSecondary,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _activityDurationMinutes != null
+                                          ? _formatDurationHrsMins(_activityDurationMinutes!)
+                                          : l10n.hintDurationMinutes,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                        color: _activityDurationMinutes != null
+                                            ? AppColors.textPrimary
+                                            : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: AppColors.textSecondary,
+                                    size: 14,
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),

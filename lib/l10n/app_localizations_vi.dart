@@ -305,7 +305,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get sectionEndDateOptional => 'Ngày kết thúc (Tùy chọn)';
 
   @override
-  String get sectionDuration => 'Thời lượng (phút)';
+  String get sectionDuration => 'Thời lượng';
 
   @override
   String get sectionDailyTimeLimit => 'Giới hạn giờ mỗi ngày';
@@ -327,7 +327,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Những việc cần làm, các bước và giai đoạn chính.';
 
   @override
-  String get hintDurationMinutes => 'Nhập thời lượng (phút)';
+  String get hintDurationMinutes => 'Nhập thời lượng';
 
   @override
   String get hintSubtaskName => 'Tên nhiệm vụ phụ';
