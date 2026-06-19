@@ -459,7 +459,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     await AccountDeletionService.instance
                         .deleteCurrentAccount(context: context);
                     if (mounted) {
-                      Navigator.of(context).pop(); // close loading dialog if still mounted
+                      // AccountDeletionService navigates to Login.
+                      // Close the loading dialog only if it's still on-screen.
+                      Navigator.of(context).pop();
                     }
                   } catch (e) {
                     if (!mounted) return;
@@ -471,6 +473,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     );
                   }
+
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.danger,

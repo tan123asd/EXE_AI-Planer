@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -19,7 +18,7 @@ class AccountDeletionService {
     final auth = FirebaseAuth.instance;
     final user = auth.currentUser;
     if (user == null) {
-      // Nothing to delete.
+      debugPrint('AUTH STATE: signed out (no user to delete)');
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (route) => false,
@@ -27,47 +26,54 @@ class AccountDeletionService {
       return;
     }
 
+    debugPrint('AUTH STATE: signed in (deletion started)');
+
     final uid = user.uid;
 
-    // 1) Delete Firestore data first (Google Play expects user data removal).
-    // We keep auth deletion for last; if re-auth is required we may need the user
-    // session to still exist.
-    await FirestoreService().deleteUserData(uid: uid);
-
-    // 2) Delete Firebase Auth account.
-    // Handle requires-recent-login per Google Play expectations.
     try {
-      await _deleteAuthUserWithReauth(user: user, context: context);
-    } catch (e) {
-      // If auth deletion fails, we do NOT silently swallow. Firestore is already deleted.
-      // Provide actionable feedback.
-      rethrow;
-    }
+      // 1) Delete Firestore data first (Google Play expects user data removal).
+      // Guard against races: if uid is missing, skip.
+      if (uid.isNotEmpty) {
+        debugPrint('AUTH STATE: deleting Firestore user data for $uid');
+        await FirestoreService().deleteUserData(uid: uid);
+      } else {
+        debugPrint('AUTH STATE: uid missing; skipping Firestore delete');
+      }
 
-    // 3) Clear local cached data.
-    await StorageService().clearAccountData();
+      // 2) Delete Firebase Auth account.
+      debugPrint('AUTH STATE: deleting Firebase Auth user');
+      await _deleteAuthUserWithReauth(user: user);
 
-    // 4) Redirect to login screen.
-    if (!context.mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
+      // 3) Explicitly sign out to force authStateChanges(user==null) emission.
+      // (Some platforms can delay token refresh; explicit signOut helps.)
+      debugPrint('AUTH STATE: explicit signOut after deletion');
+      try {
+        await auth.signOut();
+      } catch (_) {}
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.accountDeleted ?? l10n.loggedOut),
-          backgroundColor: AppColors.success,
-        ),
+      // 4) Clear local cached data.
+      debugPrint('AUTH STATE: clearing local account data');
+      await StorageService().clearAccountData();
+
+      // 5) Redirect to login screen safely.
+      if (!context.mounted) return;
+      debugPrint('AUTH STATE: navigate login');
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
       );
+
+
+      // Intentionally do not show SnackBar after deletion.
+      // Navigation can coincide with auth teardown and cause app termination on some devices.
+
+    } catch (e) {
+      debugPrint('AUTH STATE: deletion error: $e');
+      rethrow;
     }
   }
 
-  Future<void> _deleteAuthUserWithReauth({
-    required User user,
-    required BuildContext context,
-  }) async {
+  Future<void> _deleteAuthUserWithReauth({required User user}) async {
     final auth = FirebaseAuth.instance;
 
     try {
@@ -78,14 +84,14 @@ class AccountDeletionService {
         rethrow;
       }
 
+      debugPrint('AUTH STATE: requires-recent-login; reauth started');
+
       // Attempt re-auth depending on provider.
       final providerId = _primaryProviderId(user);
       if (providerId == 'google.com') {
         await AuthService().reauthenticateWithGoogle();
       } else {
-        // Best-effort: for unknown providers, fall back to deleting after forcing
-        // a fresh auth state; the app can send the user to login if needed.
-        // We still surface the error.
+        // For unknown providers, sign out and rethrow; user should re-login.
         try {
           await auth.signOut();
         } catch (_) {}
@@ -117,4 +123,5 @@ class AccountDeletionService {
     return providerData.first.providerId;
   }
 }
+
 
