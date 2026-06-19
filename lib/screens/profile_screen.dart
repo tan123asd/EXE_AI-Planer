@@ -10,8 +10,10 @@ import '../screens/notifications_screen.dart';
 import '../models/scheduler_models.dart';
 import '../providers/language_provider.dart';
 import '../widgets/time_picker_12h.dart';
+import '../services/account_deletion_service.dart';
 
 class ProfileScreen extends StatefulWidget {
+
   const ProfileScreen({Key? key}) : super(key: key);
 
   @override
@@ -409,6 +411,85 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: AppSpacing.lg),
 
+            // Delete account Button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () async {
+                  final bool? confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Text(l10n.deleteAccount),
+                      content: Text(l10n.deleteAccountConfirm),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text(l10n.cancel),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: Text(
+                            l10n.delete,
+                            style: const TextStyle(color: AppColors.danger),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirmed != true) return;
+
+                  // Loading state via a blocking dialog.
+                  if (!mounted) return;
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (ctx) => const AlertDialog(
+                      content: SizedBox(
+                        height: 40,
+                        width: 40,
+                        child: Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
+                    ),
+                  );
+
+                  try {
+                    await AccountDeletionService.instance
+                        .deleteCurrentAccount(context: context);
+                    if (mounted) {
+                      Navigator.of(context).pop(); // close loading dialog if still mounted
+                    }
+                  } catch (e) {
+                    if (!mounted) return;
+                    Navigator.of(context).pop(); // close loading dialog
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${l10n.deleteAccountError}: $e'),
+                        backgroundColor: AppColors.danger,
+                      ),
+                    );
+                  }
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.danger,
+                  side: const BorderSide(
+                    color: AppColors.danger,
+                    width: 1,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                ),
+                child: Text(l10n.deleteAccount),
+              ),
+            ),
+
+            const SizedBox(height: AppSpacing.sm),
+
             // Logout Button
             SizedBox(
               width: double.infinity,
@@ -481,6 +562,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+
 
   Future<void> _addProductivityWindow() async {
     final l10n = AppLocalizations.of(context)!;

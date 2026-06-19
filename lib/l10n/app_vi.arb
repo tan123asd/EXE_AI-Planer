@@ -90,7 +90,14 @@
   "save": "Lưu",
   "logout": "Đăng xuất",
   "logoutConfirm": "Bạn có chắc muốn đăng xuất không?",
+
+  "deleteAccount": "Xóa tài khoản",
+  "deleteAccountConfirm": "Thao tác này sẽ xóa vĩnh viễn tài khoản và tất cả dữ liệu của bạn. Không thể hoàn tác.",
+  "deleteAccountError": "Xóa tài khoản thất bại",
+  "accountDeleted": "Đã xóa tài khoản thành công",
+  "delete": "Xóa",
   "profileUpdated": "Cập nhật hồ sơ thành công!",
+
   "endTimeError": "Giờ kết thúc phải sau giờ bắt đầu",
   "loggedOut": "Đăng xuất thành công",
   "selectStartFocus": "Chọn giờ bắt đầu tập trung",

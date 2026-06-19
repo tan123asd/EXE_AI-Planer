@@ -332,4 +332,38 @@ class FirestoreService {
       _applyRemoteProfile(prefs, remote);
     }
   }
+
+  /// Delete all Firestore user data associated with [uid].
+  ///
+  /// This is required for Google Play account deletion compliance.
+  Future<void> deleteUserData({required String uid}) async {
+    // Profile stored as: users/{uid}/data/profile
+    final profileRef = _db.collection('users').doc(uid).collection('data').doc('profile');
+
+    // Tasks: users/{uid}/tasks/*
+    final tasksCol = _db.collection('users').doc(uid).collection('tasks');
+
+    // Performance: users/{uid}/performance/*
+    final performanceCol = _db.collection('users').doc(uid).collection('performance');
+
+    final batch = _db.batch();
+
+    // Profile doc
+    batch.delete(profileRef);
+
+    // Tasks
+    final tasksSnap = await tasksCol.get();
+    for (final doc in tasksSnap.docs) {
+      batch.delete(doc.reference);
+    }
+
+    // Performance
+    final perfSnap = await performanceCol.get();
+    for (final doc in perfSnap.docs) {
+      batch.delete(doc.reference);
+    }
+
+    await batch.commit();
+  }
 }
+

@@ -99,4 +99,37 @@ class AuthService {
   String? getUserUID() {
     return _firebaseAuth.currentUser?.uid;
   }
+
+  /// Re-authenticate current user using Google Sign-In.
+  ///
+  /// Used to satisfy Firebase's `requires-recent-login` requirement for sensitive
+  /// operations like account deletion.
+  Future<void> reauthenticateWithGoogle() async {
+    // Trigger the authentication flow again.
+    final googleUser = await _googleSignIn.signIn();
+    if (googleUser == null) {
+      throw FirebaseAuthException(
+        code: 'user-cancelled-reauth',
+        message: 'User cancelled Google re-authentication.',
+      );
+    }
+
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+
+    final user = _firebaseAuth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'user-missing',
+        message: 'No signed-in user to re-authenticate.',
+      );
+    }
+
+    // Re-authenticate the user.
+    await user.reauthenticateWithCredential(credential);
+  }
 }
+

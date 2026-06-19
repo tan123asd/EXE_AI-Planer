@@ -194,6 +194,22 @@ class AppLocalizationsVi extends AppLocalizations {
   String get logoutConfirm => 'Bạn có chắc muốn đăng xuất không?';
 
   @override
+  String get deleteAccount => 'Xóa tài khoản';
+
+  @override
+  String get deleteAccountConfirm =>
+      'Thao tác này sẽ xóa vĩnh viễn tài khoản và tất cả dữ liệu của bạn. Không thể hoàn tác.';
+
+  @override
+  String get deleteAccountError => 'Xóa tài khoản thất bại';
+
+  @override
+  String get accountDeleted => 'Đã xóa tài khoản thành công';
+
+  @override
+  String get delete => 'Xóa';
+
+  @override
   String get profileUpdated => 'Cập nhật hồ sơ thành công!';
 
   @override

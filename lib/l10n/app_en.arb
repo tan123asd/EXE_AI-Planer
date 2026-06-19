@@ -90,7 +90,14 @@
   "save": "Save",
   "logout": "Logout",
   "logoutConfirm": "Are you sure you want to logout?",
+
+  "deleteAccount": "Delete account",
+  "deleteAccountConfirm": "This permanently deletes your account and all your data. This action cannot be undone.",
+  "deleteAccountError": "Account deletion failed",
+  "accountDeleted": "Account deleted successfully",
+  "delete": "Delete",
   "profileUpdated": "Profile updated successfully!",
+
   "endTimeError": "End time must be after start time",
   "loggedOut": "Logged out successfully",
   "selectStartFocus": "Select start of focus window",
