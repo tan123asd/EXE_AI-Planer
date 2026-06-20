@@ -1,20 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../l10n/app_localizations.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/storage_service.dart';
 import '../screens/login_screen.dart';
-import '../utils/constants.dart';
 
 class AccountDeletionService {
   AccountDeletionService._();
   static final AccountDeletionService instance = AccountDeletionService._();
 
   Future<void> deleteCurrentAccount({required BuildContext context}) async {
-    final l10n = AppLocalizations.of(context)!;
-
     final auth = FirebaseAuth.instance;
     final user = auth.currentUser;
     if (user == null) {
@@ -31,8 +27,13 @@ class AccountDeletionService {
     final uid = user.uid;
 
     try {
-      // 1) Delete Firestore data first (Google Play expects user data removal).
-      // Guard against races: if uid is missing, skip.
+      // 1) Re-authenticate FIRST. If the user cancels or re-auth fails, abort
+      //    here BEFORE deleting anything — avoids a half-deleted account state.
+      debugPrint('AUTH STATE: re-authenticating before deletion');
+      await _reauthenticate(user: user);
+
+      // 2) Delete Firestore data (Google Play expects user data removal).
+      //    Guard against races: if uid is missing, skip.
       if (uid.isNotEmpty) {
         debugPrint('AUTH STATE: deleting Firestore user data for $uid');
         await FirestoreService().deleteUserData(uid: uid);
@@ -40,22 +41,23 @@ class AccountDeletionService {
         debugPrint('AUTH STATE: uid missing; skipping Firestore delete');
       }
 
-      // 2) Delete Firebase Auth account.
+      // 3) Delete Firebase Auth account (re-auth from step 1 is still fresh).
       debugPrint('AUTH STATE: deleting Firebase Auth user');
-      await _deleteAuthUserWithReauth(user: user);
+      final freshUser = auth.currentUser ?? user;
+      await freshUser.delete();
 
-      // 3) Explicitly sign out to force authStateChanges(user==null) emission.
+      // 4) Explicitly sign out to force authStateChanges(user==null) emission.
       // (Some platforms can delay token refresh; explicit signOut helps.)
       debugPrint('AUTH STATE: explicit signOut after deletion');
       try {
         await auth.signOut();
       } catch (_) {}
 
-      // 4) Clear local cached data.
+      // 5) Clear local cached data.
       debugPrint('AUTH STATE: clearing local account data');
       await StorageService().clearAccountData();
 
-      // 5) Redirect to login screen safely.
+      // 6) Redirect to login screen safely.
       if (!context.mounted) return;
       debugPrint('AUTH STATE: navigate login');
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
@@ -73,41 +75,20 @@ class AccountDeletionService {
     }
   }
 
-  Future<void> _deleteAuthUserWithReauth({required User user}) async {
-    final auth = FirebaseAuth.instance;
-
-    try {
-      await user.delete();
-      return;
-    } on FirebaseAuthException catch (e) {
-      if (e.code != 'requires-recent-login') {
-        rethrow;
-      }
-
-      debugPrint('AUTH STATE: requires-recent-login; reauth started');
-
-      // Attempt re-auth depending on provider.
-      final providerId = _primaryProviderId(user);
-      if (providerId == 'google.com') {
-        await AuthService().reauthenticateWithGoogle();
-      } else {
-        // For unknown providers, sign out and rethrow; user should re-login.
-        try {
-          await auth.signOut();
-        } catch (_) {}
-        throw e;
-      }
-
-      // After re-auth, try delete again.
-      final freshUser = auth.currentUser;
-      if (freshUser == null) {
-        throw FirebaseAuthException(
-          code: 'user-missing-after-reauth',
-          message: 'User missing after re-authentication.',
-        );
-      }
-
-      await freshUser.delete();
+  /// Re-authenticates the current user up-front so the subsequent account
+  /// deletion cannot fail with `requires-recent-login`. Throws if the user
+  /// cancels or the provider is unsupported — the caller then aborts before
+  /// any data is deleted.
+  Future<void> _reauthenticate({required User user}) async {
+    final providerId = _primaryProviderId(user);
+    if (providerId == 'google.com') {
+      await AuthService().reauthenticateWithGoogle();
+    } else {
+      // Only Google sign-in is supported in this app.
+      throw FirebaseAuthException(
+        code: 'unsupported-provider',
+        message: 'Re-authentication not supported for provider: $providerId',
+      );
     }
   }
 

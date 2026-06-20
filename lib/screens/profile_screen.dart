@@ -458,11 +458,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   try {
                     await AccountDeletionService.instance
                         .deleteCurrentAccount(context: context);
-                    if (mounted) {
-                      // AccountDeletionService navigates to Login.
-                      // Close the loading dialog only if it's still on-screen.
-                      Navigator.of(context).pop();
-                    }
+                    // On success, AccountDeletionService already navigated to
+                    // Login via pushAndRemoveUntil, which also removed the
+                    // loading dialog — nothing to pop here.
                   } catch (e) {
                     if (!mounted) return;
                     Navigator.of(context).pop(); // close loading dialog
