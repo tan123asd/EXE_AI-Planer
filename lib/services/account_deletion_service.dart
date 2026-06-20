@@ -1,24 +1,28 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/storage_service.dart';
-import '../screens/login_screen.dart';
 
 class AccountDeletionService {
   AccountDeletionService._();
   static final AccountDeletionService instance = AccountDeletionService._();
 
-  Future<void> deleteCurrentAccount({required BuildContext context}) async {
+  /// Deletes the current account end-to-end: re-auth → Firestore data →
+  /// Firebase Auth user → sign out → local cache.
+  ///
+  /// Navigation is intentionally NOT handled here. Signing out makes the app's
+  /// `_AuthGate` (a StreamBuilder on authStateChanges) show the login screen on
+  /// its own — doing a second navigation here races with that teardown and
+  /// leaves the caller's loading dialog stuck on screen. The caller is
+  /// responsible only for dismissing its own loading UI.
+  Future<void> deleteCurrentAccount() async {
     final auth = FirebaseAuth.instance;
     final user = auth.currentUser;
     if (user == null) {
+      // Already signed out — _AuthGate is already showing the login screen.
       debugPrint('AUTH STATE: signed out (no user to delete)');
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
       return;
     }
 
@@ -46,29 +50,19 @@ class AccountDeletionService {
       final freshUser = auth.currentUser ?? user;
       await freshUser.delete();
 
-      // 4) Explicitly sign out to force authStateChanges(user==null) emission.
-      // (Some platforms can delay token refresh; explicit signOut helps.)
-      debugPrint('AUTH STATE: explicit signOut after deletion');
+      // 4) Sign out of Firebase AND disconnect Google. A bare
+      //    FirebaseAuth.signOut() leaves the Google session cached, which lets
+      //    the just-deleted email sign back in silently (no account picker).
+      //    authStateChanges(null) here is what makes _AuthGate show login.
+      debugPrint('AUTH STATE: signing out + disconnecting Google');
       try {
         await auth.signOut();
       } catch (_) {}
+      await AuthService().disconnectGoogle();
 
       // 5) Clear local cached data.
       debugPrint('AUTH STATE: clearing local account data');
       await StorageService().clearAccountData();
-
-      // 6) Redirect to login screen safely.
-      if (!context.mounted) return;
-      debugPrint('AUTH STATE: navigate login');
-      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
-
-
-      // Intentionally do not show SnackBar after deletion.
-      // Navigation can coincide with auth teardown and cause app termination on some devices.
-
     } catch (e) {
       debugPrint('AUTH STATE: deletion error: $e');
       rethrow;

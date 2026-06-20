@@ -144,13 +144,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withOpacity(0.1)
+              ? AppColors.primary.withValues(alpha: 0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.sm),
           border: Border.all(
             color: isSelected
                 ? AppColors.primary
-                : AppColors.textSecondary.withOpacity(0.2),
+                : AppColors.textSecondary.withValues(alpha: 0.2),
           ),
         ),
         child: Row(
@@ -187,7 +187,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Container(
               padding: const EdgeInsets.all(AppSpacing.xs),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.12),
+                color: AppColors.primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: const Icon(Icons.auto_awesome,
@@ -211,7 +211,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
               Divider(
-                  color: AppColors.textSecondary.withOpacity(0.2)),
+                  color: AppColors.textSecondary.withValues(alpha: 0.2)),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 '${l10n.version} 1.0.0',
@@ -251,7 +251,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             // Profile Picture
             CircleAvatar(
               radius: 50,
-              backgroundColor: AppColors.primary.withOpacity(0.1),
+              backgroundColor: AppColors.primary.withValues(alpha: 0.1),
               backgroundImage:
                   photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
               child: photoUrl.isEmpty
@@ -438,9 +438,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   );
 
                   if (confirmed != true) return;
+                  if (!mounted) return;
+
+                  // Capture the root navigator BEFORE the async work. A
+                  // successful deletion signs the user out, which flips
+                  // _AuthGate to the login screen and disposes this screen's
+                  // context — so `context` can't be used to close the loading
+                  // dialog afterwards. The root NavigatorState survives.
+                  final rootNavigator =
+                      Navigator.of(context, rootNavigator: true);
 
                   // Loading state via a blocking dialog.
-                  if (!mounted) return;
                   showDialog(
                     context: context,
                     barrierDismissible: false,
@@ -456,22 +464,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   );
 
                   try {
-                    await AccountDeletionService.instance
-                        .deleteCurrentAccount(context: context);
-                    // On success, AccountDeletionService already navigated to
-                    // Login via pushAndRemoveUntil, which also removed the
-                    // loading dialog — nothing to pop here.
+                    await AccountDeletionService.instance.deleteCurrentAccount();
                   } catch (e) {
-                    if (!mounted) return;
-                    Navigator.of(context).pop(); // close loading dialog
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('${l10n.deleteAccountError}: $e'),
-                        backgroundColor: AppColors.danger,
-                      ),
-                    );
+                    // Failure happens before sign-out, so this screen is still
+                    // mounted. Close the loading dialog and report the error.
+                    rootNavigator.pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${l10n.deleteAccountError}: $e'),
+                          backgroundColor: AppColors.danger,
+                        ),
+                      );
+                    }
+                    return;
                   }
 
+                  // Success: account deleted + signed out → _AuthGate now shows
+                  // the login screen underneath. Remove the loading dialog that
+                  // is still sitting on top of it.
+                  rootNavigator.pop();
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.danger,
@@ -674,7 +686,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.08),
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius:
                       BorderRadius.circular(AppRadius.sm),
                 ),
@@ -735,17 +747,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         suffixIcon: suffixIcon,
         filled: true,
         fillColor:
-            enabled ? Colors.white : Colors.grey.withOpacity(0.1),
+            enabled ? Colors.white : Colors.grey.withValues(alpha: 0.1),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.sm),
           borderSide: BorderSide(
-            color: AppColors.textSecondary.withOpacity(0.3),
+            color: AppColors.textSecondary.withValues(alpha: 0.3),
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.sm),
           borderSide: BorderSide(
-            color: AppColors.textSecondary.withOpacity(0.3),
+            color: AppColors.textSecondary.withValues(alpha: 0.3),
           ),
         ),
         focusedBorder: OutlineInputBorder(
@@ -758,7 +770,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.sm),
           borderSide: BorderSide(
-            color: AppColors.textSecondary.withOpacity(0.2),
+            color: AppColors.textSecondary.withValues(alpha: 0.2),
           ),
         ),
       ),

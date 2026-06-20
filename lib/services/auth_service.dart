@@ -80,6 +80,21 @@ class AuthService {
     }
   }
 
+  /// Fully disconnects the cached Google account so the next sign-in shows the
+  /// account picker (and re-consent). Used during account deletion — a bare
+  /// FirebaseAuth.signOut() leaves the Google session cached, which would let
+  /// the just-deleted email sign back in silently.
+  Future<void> disconnectGoogle() async {
+    try {
+      await _googleSignIn.disconnect();
+    } catch (_) {
+      // disconnect() throws if not currently connected; fall back to signOut.
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+    }
+  }
+
   /// Get user display name
   String? getUserDisplayName() {
     return _firebaseAuth.currentUser?.displayName;
