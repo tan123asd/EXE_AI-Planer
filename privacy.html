@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chính sách quyền riêng tư — Zentro</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --primary: #FF6B35;
+      --primary-dk: #e05520;
+      --primary-light: #fff3ee;
+      --bg: #F8F9FA;
+      --text: #1a1a2e;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --card: #ffffff;
+      --blue-light: #eff6ff;
+      --blue: #3B82F6;
+      --green-light: #f0fdf4;
+      --green: #10B981;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.75;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 6%; height: 64px;
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      display: flex; align-items: center; gap: .6rem;
+      text-decoration: none;
+    }
+    .logo-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; font-weight: 900; color: #fff;
+      flex-shrink: 0;
+    }
+    .logo-text {
+      font-size: 1.25rem; font-weight: 800;
+      color: var(--text); letter-spacing: -0.5px;
+    }
+    .logo-text span { color: var(--primary); }
+    .back-link {
+      font-size: .875rem; color: var(--muted);
+      text-decoration: none; display: flex; align-items: center; gap: .3rem;
+      transition: color .2s;
+    }
+    .back-link:hover { color: var(--primary); }
+
+    /* ── HERO HEADER ── */
+    .hero-header {
+      background: linear-gradient(135deg, #fff5f0 0%, #ffffff 50%, #f0f4ff 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 56px 6% 48px;
+      text-align: center;
+    }
+    .hero-header .badge {
+      display: inline-flex; align-items: center; gap: .4rem;
+      background: var(--primary-light); border: 1px solid #ffd4c2;
+      color: var(--primary); font-size: .78rem; font-weight: 700;
+      padding: .3rem .9rem; border-radius: 99px;
+      margin-bottom: 1.25rem; letter-spacing: .02em;
+    }
+    .hero-header h1 {
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 800; line-height: 1.2;
+      margin-bottom: .75rem;
+    }
+    .hero-header h1 span { color: var(--primary); }
+    .hero-header p {
+      font-size: 1rem; color: var(--muted);
+      max-width: 640px; margin: 0 auto 1.5rem;
+    }
+    .meta-row {
+      display: flex; justify-content: center; gap: 1.5rem;
+      flex-wrap: wrap; font-size: .82rem; color: var(--muted);
+    }
+    .meta-row span { display: flex; align-items: center; gap: .3rem; }
+
+    /* ── DEVELOPER CARD ── */
+    .dev-card {
+      max-width: 1100px; margin: -24px auto 0;
+      background: var(--card); border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 20px rgba(0,0,0,.06);
+      padding: 1.25rem 2rem;
+      display: flex; align-items: center; justify-content: center; gap: 3rem;
+      flex-wrap: wrap;
+    }
+    .dev-card .dev-label {
+      font-size: .75rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .06em;
+      margin-bottom: .2rem;
+    }
+    .dev-card .dev-value {
+      font-size: .92rem; font-weight: 600; color: var(--text);
+    }
+    .dev-card .dev-value a { color: var(--primary); text-decoration: none; }
+    .dev-sep { width: 1px; height: 32px; background: var(--border); flex-shrink: 0; }
+
+    /* ── LAYOUT ── */
+    .container {
+      max-width: 1100px; margin: 0 auto;
+      padding: 48px 6% 80px;
+    }
+
+    /* ── SECTION ── */
+    .section {
+      background: var(--card); border-radius: 16px;
+      border: 1px solid var(--border);
+      padding: 2rem 2.25rem;
+      margin-bottom: 1.25rem;
+      transition: box-shadow .2s;
+    }
+    .section:hover { box-shadow: 0 4px 20px rgba(0,0,0,.05); }
+
+    .section-header {
+      display: flex; align-items: center; gap: .75rem;
+      margin-bottom: 1rem; padding-bottom: .75rem;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .section-num {
+      width: 28px; height: 28px; flex-shrink: 0;
+      background: var(--primary-light); color: var(--primary);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      font-size: .8rem; font-weight: 800;
+    }
+    .section h2 {
+      font-size: 1.05rem; font-weight: 700; color: var(--text);
+    }
+
+    p { margin-bottom: .75rem; font-size: .93rem; color: #374151; }
+    p:last-child { margin-bottom: 0; }
+
+    ul {
+      margin: .25rem 0 .5rem 1rem;
+      font-size: .93rem; color: #374151;
+    }
+    ul li { margin-bottom: .5rem; padding-left: .25rem; }
+    ul li:last-child { margin-bottom: 0; }
+
+    .tag {
+      display: inline-flex; align-items: center;
+      font-size: .75rem; font-weight: 700;
+      padding: .15rem .6rem; border-radius: 6px;
+      margin-right: .3rem; vertical-align: middle;
+    }
+    .tag.orange { background: var(--primary-light); color: var(--primary); }
+    .tag.green  { background: var(--green-light);   color: var(--green); }
+    .tag.blue   { background: var(--blue-light);    color: var(--blue); }
+
+    /* ── CONTACT BOX ── */
+    .contact-box {
+      background: linear-gradient(135deg, var(--primary) 0%, #e05a8a 100%);
+      border-radius: 16px; padding: 2rem 2.25rem;
+      color: #fff; margin-bottom: 1.25rem;
+    }
+    .contact-box h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: .5rem; }
+    .contact-box p { color: rgba(255,255,255,.85); margin-bottom: .5rem; font-size: .93rem; }
+    .contact-box a {
+      display: inline-flex; align-items: center; gap: .4rem;
+      background: rgba(255,255,255,.18); color: #fff;
+      font-weight: 700; font-size: .9rem;
+      padding: .55rem 1.1rem; border-radius: 8px;
+      text-decoration: none; margin-top: .5rem;
+      transition: background .2s;
+    }
+    .contact-box a:hover { background: rgba(255,255,255,.28); }
+    .contact-box .response-time {
+      font-size: .8rem; opacity: .7; margin-top: .6rem; margin-bottom: 0;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      background: #1a1a2e; color: #6b7280;
+      text-align: center; padding: 2rem 6%; font-size: .83rem;
+    }
+    footer a { color: var(--primary); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 600px) {
+      .dev-card { gap: 1rem; }
+      .dev-sep { display: none; }
+      .section { padding: 1.5rem; }
+      .hero-header { padding: 40px 5% 52px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="logo" href="index.html">
+    <img src="assets/logo.png" alt="Zentro" style="width:32px;height:32px;border-radius:8px;object-fit:cover">
+    <span class="logo-text">Zen<span>tro</span></span>
+  </a>
+  <a class="back-link" href="index.html">← Về trang chủ</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero-header">
+  <div class="badge">📋 Chính sách quyền riêng tư</div>
+  <h1>Dữ liệu của bạn<br>thuộc về <span>bạn</span></h1>
+  <p>Zentro cam kết minh bạch về cách chúng tôi thu thập, sử dụng và bảo vệ thông tin cá nhân của bạn.</p>
+  <div class="meta-row">
+    <span>🗓 Cập nhật: 19 tháng 6, 2026</span>
+    <span>📦 Ứng dụng: Zentro (com.exe.aiplanner)</span>
+  </div>
+</div>
+
+<!-- DEVELOPER CARD -->
+<div style="padding: 0 6%;">
+  <div class="dev-card">
+    <div>
+      <div class="dev-label">Nhà phát triển</div>
+      <div class="dev-value">Zentro Team</div>
+    </div>
+    <div class="dev-sep"></div>
+    <div>
+      <div class="dev-label">Email liên hệ</div>
+      <div class="dev-value"><a href="mailto:zentrosupportteam@gmail.com">zentrosupportteam@gmail.com</a></div>
+    </div>
+    <div class="dev-sep"></div>
+    <div>
+      <div class="dev-label">Phản hồi trong</div>
+      <div class="dev-value">7 ngày làm việc</div>
+    </div>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div class="container">
+
+  <!-- 1 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <h2>Thông tin chúng tôi thu thập</h2>
+    </div>
+    <ul>
+      <li><strong>Thông tin tài khoản:</strong> Tên, địa chỉ email và ảnh đại diện khi bạn đăng nhập bằng Google.</li>
+      <li><strong>Hồ sơ cá nhân:</strong> Số điện thoại và bio bạn tự điền trong phần Chỉnh sửa hồ sơ.</li>
+      <li><strong>Dữ liệu lịch học:</strong> Tên task, deadline, thời lượng, mức độ ưu tiên và lịch trình bạn tạo trong ứng dụng.</li>
+      <li><strong>Nội dung chat:</strong> Tin nhắn bạn gửi cho AI trong tính năng Chat Planner để xử lý và tạo lịch.</li>
+      <li><strong>Dữ liệu hiệu suất:</strong> Thời gian ước tính và thực tế hoàn thành task để cải thiện gợi ý AI.</li>
+      <li><strong>Thông tin thiết bị:</strong> Loại thiết bị, phiên bản hệ điều hành — thu thập tự động bởi Firebase Analytics.</li>
+    </ul>
+  </div>
+
+  <!-- 2 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <h2>Mục đích sử dụng dữ liệu</h2>
+    </div>
+    <ul>
+      <li>Cung cấp tính năng lên lịch và nhắc nhở được cá nhân hóa theo thói quen của bạn.</li>
+      <li>Xử lý yêu cầu qua AI Chat để tạo và điều chỉnh kế hoạch học tập.</li>
+      <li>Phân tích hiệu suất học tập và đưa ra gợi ý cải thiện.</li>
+      <li>Gửi thông báo nhắc nhở task và nghỉ giải lao (Pomodoro 50/10).</li>
+      <li>Xác thực danh tính và bảo mật tài khoản của bạn.</li>
+    </ul>
+  </div>
+
+  <!-- 3 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <h2>Dữ liệu được lưu ở đâu</h2>
+    </div>
+    <ul>
+      <li>
+        <span class="tag green">Trên thiết bị</span>
+        Task, lịch trình, lịch sử chat và cài đặt được lưu cục bộ trên điện thoại qua SharedPreferences.
+      </li>
+      <li>
+        <span class="tag blue">Firebase Auth</span>
+        Danh tính đăng nhập được xác thực qua Firebase Authentication và Google Sign-In.
+      </li>
+      <li>
+        <span class="tag blue">Firestore</span>
+        Khi bạn lưu hồ sơ, các thông tin sau được đồng bộ lên Firestore: tên, email, số điện thoại, bio, ảnh đại diện, cài đặt giờ năng suất và cài đặt nghỉ giải lao. Dữ liệu được bảo mật theo tiêu chuẩn Google Cloud.
+      </li>
+      <li>
+        <span class="tag orange">OpenAI API</span>
+        Nội dung tin nhắn chat được gửi đến OpenAI để xử lý AI. OpenAI không lưu trữ dữ liệu này theo chính sách API của họ.
+      </li>
+    </ul>
+  </div>
+
+  <!-- 4 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <h2>Chia sẻ dữ liệu với bên thứ ba</h2>
+    </div>
+    <p>Chúng tôi <strong>không bán</strong> dữ liệu cá nhân của bạn. Dữ liệu chỉ được chia sẻ với:</p>
+    <ul>
+      <li><strong>Google / Firebase:</strong> Xác thực đăng nhập và lưu trữ hồ sơ trên Firestore.</li>
+      <li><strong>OpenAI:</strong> Nội dung chat để xử lý yêu cầu AI. Xem <a href="https://openai.com/policies/privacy-policy" target="_blank" style="color:var(--primary);font-weight:600">Chính sách bảo mật OpenAI →</a></li>
+    </ul>
+    <p style="margin-top:.75rem">Không có bên thứ ba nào khác nhận dữ liệu cá nhân từ Zentro.</p>
+  </div>
+
+  <!-- 5 -->
+  <div class="section" id="delete">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <h2>Quyền của bạn</h2>
+    </div>
+    <ul>
+      <li><strong>Xem dữ liệu:</strong> Mọi task và lịch trình hiển thị trực tiếp trong ứng dụng.</li>
+      <li><strong>Xóa dữ liệu cục bộ:</strong> Gỡ cài đặt ứng dụng sẽ xóa toàn bộ dữ liệu trên thiết bị.</li>
+      <li><strong>Xóa dữ liệu Firestore:</strong> Gửi email đến zentrosupportteam@gmail.com — chúng tôi xóa trong vòng 7 ngày làm việc.</li>
+      <li><strong>Tắt thông báo:</strong> Vào Cài đặt hệ thống → Ứng dụng → Zentro → Thông báo.</li>
+    </ul>
+  </div>
+
+  <!-- 6 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <h2>Bảo mật dữ liệu</h2>
+    </div>
+    <ul>
+      <li>Mã hóa dữ liệu trong quá trình truyền tải qua HTTPS/TLS.</li>
+      <li>Xác thực qua Google OAuth 2.0 — Zentro không lưu mật khẩu của bạn.</li>
+      <li>Dữ liệu cục bộ được bảo vệ bởi sandbox ứng dụng Android.</li>
+      <li>Dữ liệu Firestore được bảo mật bởi Firebase Security Rules.</li>
+    </ul>
+  </div>
+
+  <!-- 7 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <h2>Thanh toán và gói Pro</h2>
+    </div>
+    <p>Zentro cung cấp gói nâng cấp Pro qua <strong>Google Play Billing</strong>. Zentro <strong>không thu thập, không lưu trữ</strong> thông tin thẻ tín dụng hay thông tin thanh toán — toàn bộ giao dịch được xử lý và bảo mật bởi Google Play.</p>
+    <p>Để quản lý hoặc hủy đăng ký: <em>Google Play → Đăng ký của tôi → Zentro</em>.</p>
+  </div>
+
+  <!-- 8 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <h2>Thời gian lưu trữ dữ liệu</h2>
+    </div>
+    <ul>
+      <li><strong>Dữ liệu trên thiết bị:</strong> Lưu cho đến khi bạn gỡ cài đặt ứng dụng.</li>
+      <li><strong>Dữ liệu Firestore:</strong> Lưu cho đến khi bạn yêu cầu xóa tài khoản. Chúng tôi xóa trong vòng 7 ngày làm việc.</li>
+      <li><strong>Nội dung chat gửi OpenAI:</strong> Không được lưu trữ lâu dài theo chính sách API của OpenAI.</li>
+    </ul>
+  </div>
+
+  <!-- 9 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">9</div>
+      <h2>Dữ liệu trẻ em</h2>
+    </div>
+    <p>Zentro không chủ động thu thập dữ liệu từ trẻ em dưới 13 tuổi. Nếu bạn phát hiện trẻ em dưới 13 tuổi đã cung cấp thông tin cá nhân, vui lòng liên hệ ngay để chúng tôi xóa dữ liệu.</p>
+  </div>
+
+  <!-- 10 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">10</div>
+      <h2>Thay đổi chính sách</h2>
+    </div>
+    <p>Chúng tôi có thể cập nhật chính sách này khi ứng dụng có thêm tính năng mới. Ngày cập nhật luôn hiển thị ở đầu trang. Thay đổi quan trọng sẽ được thông báo trong ứng dụng.</p>
+  </div>
+
+  <!-- CONTACT -->
+  <div class="contact-box">
+    <h2>Liên hệ về quyền riêng tư</h2>
+    <p>Có câu hỏi hoặc yêu cầu xóa dữ liệu? Đội ngũ Zentro luôn sẵn sàng hỗ trợ bạn.</p>
+    <a href="mailto:zentrosupportteam@gmail.com">✉ zentrosupportteam@gmail.com</a>
+    <p class="response-time">Phản hồi trong vòng 7 ngày làm việc</p>
+  </div>
+
+</div>
+
+<footer>
+  <p>© 2026 Zentro &nbsp;·&nbsp;
+    <a href="index.html">Trang chủ</a> &nbsp;·&nbsp;
+    <a href="mailto:zentrosupportteam@gmail.com">Liên hệ</a>
+  </p>
+</footer>
+
+</body>
+</html>

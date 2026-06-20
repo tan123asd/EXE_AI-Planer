@@ -21,7 +21,7 @@ class CalendarEventBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = color.withOpacity(isCompleted ? 0.35 : 0.85);
+    final bg = color.withValues(alpha: isCompleted ? 0.35 : 0.85);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -33,7 +33,7 @@ class CalendarEventBlock extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.08),
+                color: Colors.black.withValues(alpha: 0.08),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -84,7 +84,7 @@ class CalendarEventBlock extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w500,
-                            color: Colors.white.withOpacity(0.80),
+                            color: Colors.white.withValues(alpha: 0.80),
                             decoration: isCompleted
                                 ? TextDecoration.lineThrough
                                 : null,
@@ -100,7 +100,7 @@ class CalendarEventBlock extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: Colors.white.withOpacity(0.92),
+                            color: Colors.white.withValues(alpha: 0.92),
                             decoration: isCompleted
                                 ? TextDecoration.lineThrough
                                 : null,

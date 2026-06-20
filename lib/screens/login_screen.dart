@@ -32,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              app_constants.AppColors.primary.withOpacity(0.1),
+              app_constants.AppColors.primary.withValues(alpha: 0.1),
               Colors.white,
             ],
           ),
@@ -107,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 20),
                         decoration: BoxDecoration(
-                          color: app_constants.AppColors.danger.withOpacity(0.1),
+                          color: app_constants.AppColors.danger.withValues(alpha: 0.1),
                           border: Border.all(color: app_constants.AppColors.danger),
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -264,7 +264,7 @@ class _GoogleSignInButton extends StatelessWidget {
                 height: 24,
                 child: CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    app_constants.AppColors.primary.withOpacity(0.7),
+                    app_constants.AppColors.primary.withValues(alpha: 0.7),
                   ),
                   strokeWidth: 2,
                 ),
@@ -309,7 +309,7 @@ class _FeatureItem extends StatelessWidget {
           width: 50,
           height: 50,
           decoration: BoxDecoration(
-            color: app_constants.AppColors.primary.withOpacity(0.1),
+            color: app_constants.AppColors.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: app_constants.AppColors.primary, size: 28),

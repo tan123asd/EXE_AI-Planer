@@ -39,12 +39,12 @@ class ProgressStatsCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppRadius.xl),
         border: Border.all(
-          color: AppColors.textSecondary.withOpacity(0.1),
+          color: AppColors.textSecondary.withValues(alpha: 0.1),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 15,
             offset: const Offset(0, 4),
           ),
@@ -71,7 +71,7 @@ class ProgressStatsCard extends StatelessWidget {
               gradient: LinearGradient(
                 colors: [
                   Colors.transparent,
-                  AppColors.textSecondary.withOpacity(0.15),
+                  AppColors.textSecondary.withValues(alpha: 0.15),
                   Colors.transparent,
                 ],
                 begin: Alignment.topCenter,
@@ -113,7 +113,7 @@ class ProgressStatsCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              color: iconColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(

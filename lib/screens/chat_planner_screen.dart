@@ -880,7 +880,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.12),
+                color: AppColors.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.auto_awesome, color: AppColors.primary, size: 18),
@@ -959,7 +959,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.12),
+              color: AppColors.primary.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.auto_awesome, size: 14, color: AppColors.primary),
@@ -988,7 +988,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                   boxShadow: AppShadows.card,
                 ),
                 child: Row(
@@ -1019,7 +1019,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
         color: AppColors.cardBackground,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),
@@ -1068,7 +1068,7 @@ class _ChatPlannerScreenState extends State<ChatPlannerScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.3),
+                    color: AppColors.primary.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),
@@ -1175,7 +1175,7 @@ class _TypingDotsState extends State<_TypingDots> with SingleTickerProviderState
                 margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.primary.withOpacity(opacity),
+                  color: AppColors.primary.withValues(alpha: opacity),
                 ),
               );
             }),

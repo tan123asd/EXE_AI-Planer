@@ -222,7 +222,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         if (showDivider)
           Divider(
               height: 1,
-              color: AppColors.textSecondary.withOpacity(0.15)),
+              color: AppColors.textSecondary.withValues(alpha: 0.15)),
       ],
     );
   }

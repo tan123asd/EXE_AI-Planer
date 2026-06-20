@@ -48,8 +48,8 @@ class PriorityTaskCard extends StatelessWidget {
   List<Color> _getGradientColors() {
     final baseColor = _getPriorityColor();
     return [
-      baseColor.withOpacity(0.08),
-      baseColor.withOpacity(0.03),
+      baseColor.withValues(alpha: 0.08),
+      baseColor.withValues(alpha: 0.03),
     ];
   }
 
@@ -65,12 +65,12 @@ class PriorityTaskCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: _getPriorityColor().withOpacity(0.15),
+          color: _getPriorityColor().withValues(alpha: 0.15),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: _getPriorityColor().withOpacity(0.08),
+            color: _getPriorityColor().withValues(alpha: 0.08),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -97,8 +97,8 @@ class PriorityTaskCard extends StatelessWidget {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          _getPriorityColor().withOpacity(0.2),
-                          _getPriorityColor().withOpacity(0.1),
+                          _getPriorityColor().withValues(alpha: 0.2),
+                          _getPriorityColor().withValues(alpha: 0.1),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(14),
@@ -145,7 +145,7 @@ class PriorityTaskCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(6),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: _getPriorityColor().withOpacity(0.3),
+                                    color: _getPriorityColor().withValues(alpha: 0.3),
                                     blurRadius: 4,
                                     offset: const Offset(0, 2),
                                   ),
@@ -192,7 +192,7 @@ class PriorityTaskCard extends StatelessWidget {
                             Icon(
                               Icons.calendar_today_rounded,
                               size: 13,
-                              color: AppColors.textSecondary.withOpacity(0.7),
+                              color: AppColors.textSecondary.withValues(alpha: 0.7),
                             ),
                             const SizedBox(width: 6),
                             Expanded(
@@ -201,7 +201,7 @@ class PriorityTaskCard extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.textSecondary.withOpacity(0.8),
+                                  color: AppColors.textSecondary.withValues(alpha: 0.8),
                                   letterSpacing: 0.2,
                                 ),
                                 maxLines: 1,
@@ -224,7 +224,7 @@ class PriorityTaskCard extends StatelessWidget {
                                 Icon(
                                   Icons.access_time_rounded,
                                   size: 13,
-                                  color: _getPriorityColor().withOpacity(0.8),
+                                  color: _getPriorityColor().withValues(alpha: 0.8),
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
@@ -244,7 +244,7 @@ class PriorityTaskCard extends StatelessWidget {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: _getPriorityColor().withOpacity(0.12),
+                                color: _getPriorityColor().withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(

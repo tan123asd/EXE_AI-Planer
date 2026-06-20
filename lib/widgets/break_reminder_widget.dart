@@ -222,14 +222,14 @@ class _BreakReminderWidgetState extends State<BreakReminderWidget> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: _isOnBreak
-              ? [AppColors.success.withOpacity(0.1), Colors.blue.withOpacity(0.05)]
-              : [AppColors.primary.withOpacity(0.1), Colors.purple.withOpacity(0.05)],
+              ? [AppColors.success.withValues(alpha: 0.1), Colors.blue.withValues(alpha: 0.05)]
+              : [AppColors.primary.withValues(alpha: 0.1), Colors.purple.withValues(alpha: 0.05)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: (_isOnBreak ? AppColors.success : AppColors.primary).withOpacity(0.3),
+          color: (_isOnBreak ? AppColors.success : AppColors.primary).withValues(alpha: 0.3),
           width: 2,
         ),
       ),
@@ -241,7 +241,7 @@ class _BreakReminderWidgetState extends State<BreakReminderWidget> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (_isOnBreak ? AppColors.success : AppColors.primary).withOpacity(0.15),
+                  color: (_isOnBreak ? AppColors.success : AppColors.primary).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -318,7 +318,7 @@ class _BreakReminderWidgetState extends State<BreakReminderWidget> {
             child: LinearProgressIndicator(
               value: progress.clamp(0.0, 1.0),
               minHeight: 8,
-              backgroundColor: Colors.black.withOpacity(0.05),
+              backgroundColor: Colors.black.withValues(alpha: 0.05),
               valueColor: AlwaysStoppedAnimation(
                 _isOnBreak ? AppColors.success : AppColors.primary,
               ),
