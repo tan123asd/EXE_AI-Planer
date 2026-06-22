@@ -177,6 +177,21 @@ class FirestoreService {
     await ref.doc(id).set(record);
   }
 
+  // ─── Streak ──────────────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>?> fetchStreak(String uid) async {
+    final docRef = _db.collection('users').doc(uid).collection('streak').doc('main');
+    final snap = await docRef.get();
+    if (!snap.exists) return null;
+    return snap.data() as Map<String, dynamic>?;
+  }
+
+  Future<void> saveStreak(String uid, Map<String, dynamic> data) async {
+    final docRef = _db.collection('users').doc(uid).collection('streak').doc('main');
+    await docRef.set(data, SetOptions(merge: true));
+  }
+
+
   // ─── Initial sync: Firestore → local ────────────────────────────────────────
 
   /// Called once after login. Pulls Firestore data into SharedPreferences.

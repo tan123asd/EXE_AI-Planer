@@ -6,7 +6,12 @@ import '../models/task.dart';
 import '../utils/constants.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/timeline_item.dart';
+import '../providers/streak_provider.dart';
+import 'package:provider/provider.dart';
+
 import '../widgets/priority_task_card.dart';
+
+
 import '../widgets/status_task_card.dart';
 import '../widgets/performance_tracking_card.dart';
 import '../services/storage_service.dart';
@@ -34,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _todayTasks = [];
   List<Map<String, dynamic>> _subjectBreakdown = [];
   String _greetingName = '';
-  int _dayStreak = 7;
+
   int _completedTasksCount = 0;
   int _plannedTaskUnitsCount = 0;
 
@@ -49,6 +54,20 @@ class _HomeScreenState extends State<HomeScreen> {
     // Auth navigation is handled by _AuthGate in main.dart.
     _loadData();
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    // Load streak once the provider/context is available.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<StreakProvider>().loadStreak(uid);
+    });
+  }
+
 
   void _loadData() {
     // Ensure the user's name is cached in storage for the profile screen.
@@ -169,6 +188,80 @@ class _HomeScreenState extends State<HomeScreen> {
             sessionIndex: sessionIndex,
             isCompleted: newStatus == TaskStatus.completed,
           );
+
+          // Evaluate streak right after a completion toggle.
+          // Use UI units: scheduledTotal = planned units for today, completedTotal = completed units for today.
+          final uid = FirebaseAuth.instance.currentUser?.uid;
+          if (uid != null && newStatus == TaskStatus.completed) {
+            final now = DateTime.now();
+            final dayKey = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+            final prev = now.subtract(const Duration(days: 1));
+            final previousDayKey = '${prev.year}-${prev.month.toString().padLeft(2, '0')}-${prev.day.toString().padLeft(2, '0')}';
+
+            // Recompute counts from latest storage state for accuracy.
+            final allTasks = _storage.getCustomTasks();
+            final today = DateTime.now();
+            final todayDate = DateTime(today.year, today.month, today.day);
+            final todayTasks = allTasks.where((task) {
+              if ((task['taskType'] ?? '') == 'Schedules') return false;
+
+              if (_isRecurringType(task)) {
+                final weekdays = task['weekdays'];
+                if (weekdays == null || weekdays is! List) return false;
+                if (!weekdays.contains(today.weekday)) return false;
+
+                final scheduleEndDate = task['scheduleEndDate'];
+                if (scheduleEndDate != null) {
+                  try {
+                    final endDate = DateTime.parse(scheduleEndDate);
+                    final endDateOnly = DateTime(endDate.year, endDate.month, endDate.day);
+                    if (todayDate.isAfter(endDateOnly)) return false;
+                  } catch (_) {}
+                }
+
+                return true;
+              }
+
+              if (task['taskType'] == 'Task') {
+                final sessions = task['sessions'];
+                if (sessions != null && sessions is List) {
+                  return sessions.any((session) {
+                    try {
+                      final sessionStart = DateTime.parse(session['startTime']);
+                      final sessionDate = DateTime(sessionStart.year, sessionStart.month, sessionStart.day);
+                      return sessionDate.isAtSameMomentAs(todayDate);
+                    } catch (_) {
+                      return false;
+                    }
+                  });
+                }
+
+                final deadline = task['deadline'];
+                if (deadline != null) {
+                  try {
+                    final deadlineDate = DateTime.parse(deadline);
+                    final deadlineDateOnly = DateTime(deadlineDate.year, deadlineDate.month, deadlineDate.day);
+                    return deadlineDateOnly.isAtSameMomentAs(todayDate);
+                  } catch (_) {
+                    return false;
+                  }
+                }
+              }
+
+              return false;
+            }).toList();
+
+            final plannedUnits = todayTasks.fold<int>(0, (sum, t) => sum + _getTaskPlanUnits(t));
+            final completedUnits = todayTasks.fold<int>(0, (sum, t) => sum + _getCompletedTaskUnits(t));
+
+            await context.read<StreakProvider>().evaluateDayAndUpdateStreak(
+              dayKey: dayKey,
+              previousDayKey: previousDayKey,
+              scheduledTotal: plannedUnits,
+              completedTotal: completedUnits,
+            );
+          }
+
           _loadData();
           return;
         }
@@ -181,10 +274,11 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (newStatus == TaskStatus.inProgress) {
       statusString = 'inProgress';
     }
-    
+
     await _storage.updateTaskStatus(taskId, statusString);
     _loadData();
   }
+
 
   TaskStatus _getTaskStatus(String taskId) {
     if (taskId.contains('::')) {
@@ -823,9 +917,11 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildOverviewMetric(
                 icon: Icons.local_fire_department_rounded,
                 label: l10n.dayStreak,
-                value: '$_dayStreak',
+                value: '${Provider.of<StreakProvider>(context).currentStreak}',
+
                 tone: const Color(0xFFFFD5D5),
               ),
+
             ],
           ),
         ],

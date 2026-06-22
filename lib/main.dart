@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:ai_study_planner/l10n/app_localizations.dart';
@@ -17,6 +18,9 @@ import 'services/auth_service.dart';
 import 'services/connectivity_service.dart';
 import 'providers/theme_provider.dart';
 import 'providers/language_provider.dart';
+import 'providers/streak_provider.dart';
+
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,7 +68,9 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider.value(value: languageProvider),
+        ChangeNotifierProvider(create: (_) => StreakProvider()),
       ],
+
       child: const MyApp(),
     ),
   );
