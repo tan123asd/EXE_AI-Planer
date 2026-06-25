@@ -5,6 +5,11 @@ import '../services/payment_service.dart';
 import '../services/subscription_service.dart';
 import '../utils/constants.dart';
 
+// Build with --dart-define=PAYMENT_MODE=play_store for Play Store (hides QR payment)
+// Build without flag (default) for direct APK distribution (shows QR payment)
+const _paymentMode = String.fromEnvironment('PAYMENT_MODE', defaultValue: 'qr');
+const _isPlayStore = _paymentMode == 'play_store';
+
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({Key? key}) : super(key: key);
 
@@ -26,10 +31,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   void initState() {
     super.initState();
-    _createRequest(_plan);
-    _tierSub = _svc.watchTierUpgrade().listen((isPro) {
-      if (isPro && mounted && !_paid) _onPaymentConfirmed();
-    });
+    if (!_isPlayStore) {
+      _createRequest(_plan);
+      _tierSub = _svc.watchTierUpgrade().listen((isPro) {
+        if (isPro && mounted && !_paid) _onPaymentConfirmed();
+      });
+    }
   }
 
   Future<void> _createRequest(ProPlan plan) async {
@@ -103,7 +110,94 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
         ),
       ),
-      body: _paid ? _buildSuccessView() : _buildPaymentView(),
+      body: _isPlayStore
+          ? _buildComingSoonView()
+          : (_paid ? _buildSuccessView() : _buildPaymentView()),
+    );
+  }
+
+  Widget _buildComingSoonView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.workspace_premium,
+                color: AppColors.primary,
+                size: 48,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Sắp ra mắt',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Tính năng nâng cấp Pro đang được phát triển và sẽ sớm ra mắt trong phiên bản tiếp theo.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+                height: 1.6,
+              ),
+            ),
+            const SizedBox(height: 32),
+            _buildBenefit(Icons.chat_bubble_rounded, 'Chat với AI Agent không giới hạn'),
+            _buildBenefit(Icons.add_task, '100 lượt AI/ngày (Free: 15 lượt)'),
+            _buildBenefit(Icons.bolt, 'Phản hồi ưu tiên, tính năng mới sớm nhất'),
+            const SizedBox(height: 40),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Quay lại',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBenefit(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

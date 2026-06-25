@@ -26,6 +26,9 @@ migrate_working_dir/
 # .vscode contains launch.json with API keys — do not commit.
 .vscode/
 
+# .env contains API keys + keystore passwords — do not commit.
+.env
+
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id

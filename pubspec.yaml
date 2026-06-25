@@ -3,7 +3,7 @@ description: Zentro - AI-powered student life scheduler for managing study deadl
 
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.0+4
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

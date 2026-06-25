@@ -326,7 +326,7 @@
     <li><a href="#how">Cách dùng</a></li>
     <li><a href="#screens">Màn hình</a></li>
   </ul>
-  <button class="nav-cta">Tải ngay</button>
+  <button class="nav-cta download-link">Tải ngay</button>
 </nav>
 
 <!-- HERO -->
@@ -340,7 +340,7 @@
   <h1>Lên kế hoạch học tập<br>thông minh hơn với <span class="accent">AI</span></h1>
   <p>Zentro giúp sinh viên tự động sắp xếp lịch học, phát hiện xung đột thời gian và theo dõi hiệu suất — tất cả qua cuộc trò chuyện tự nhiên.</p>
   <div class="hero-btns">
-    <a href="#" class="btn-primary">Tải về Android</a>
+    <a href="#" class="btn-primary download-link">Tải về Android</a>
     <a href="#features" class="btn-secondary">Xem tính năng →</a>
   </div>
 
@@ -445,10 +445,18 @@
     </div>
 
     <div style="background:#fff;border-radius:14px;padding:0;overflow:hidden;border:1px solid #e5e7eb;transition:box-shadow .2s;cursor:pointer;display:flex;flex-direction:column" onmouseover="this.style.boxShadow='0 8px 20px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
-      <img src="assets/z7929272622371_26d5e22f201ee541ebc4f7e52e4ca2c1.jpg" style="width:100%;height:auto;display:block;flex:1;object-fit:contain" alt="Chat Screen">
+      <img src="assets/1781940098759_7900403285318780619_g955343821756253994_c00fc4ae60f9bd80a717ff9d4cdc2b0c.jpg" style="width:100%;height:auto;display:block;flex:1;object-fit:contain" alt="Chat Screen">
       <div style="padding:1rem;border-top:1px solid #e5e7eb">
         <h4 style="font-weight:700;margin-bottom:.3rem">💬 Chat AI</h4>
         <p style="font-size:.8rem;color:var(--muted)">Quản lý lịch qua trò chuyện</p>
+      </div>
+    </div>
+
+    <div style="background:#fff;border-radius:14px;padding:0;overflow:hidden;border:1px solid #e5e7eb;transition:box-shadow .2s;cursor:pointer;display:flex;flex-direction:column" onmouseover="this.style.boxShadow='0 8px 20px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
+      <img src="assets/1781939833913_7900403285318780619_g955343821756253994_dd82edc4ad67d0baf0d3cb6ca95373af.jpg" style="width:100%;height:auto;display:block;flex:1;object-fit:contain" alt="AI Recommendation Screen">
+      <div style="padding:1rem;border-top:1px solid #e5e7eb">
+        <h4 style="font-weight:700;margin-bottom:.3rem">🤖 Gợi ý AI</h4>
+        <p style="font-size:.8rem;color:var(--muted)">Kế hoạch được AI tạo tự động</p>
       </div>
     </div>
 
@@ -457,14 +465,6 @@
       <div style="padding:1rem;border-top:1px solid #e5e7eb">
         <h4 style="font-weight:700;margin-bottom:.3rem">📆 Lịch</h4>
         <p style="font-size:.8rem;color:var(--muted)">Timeline trực quan theo ngày</p>
-      </div>
-    </div>
-
-    <div style="background:#fff;border-radius:14px;padding:0;overflow:hidden;border:1px solid #e5e7eb;transition:box-shadow .2s;cursor:pointer;display:flex;flex-direction:column" onmouseover="this.style.boxShadow='0 8px 20px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
-      <img src="assets/z7926686580489_9bcc23995b922c5aec2f05ac4134f425.jpg" style="width:100%;height:auto;display:block;flex:1;object-fit:contain" alt="Profile Screen">
-      <div style="padding:1rem;border-top:1px solid #e5e7eb">
-        <h4 style="font-weight:700;margin-bottom:.3rem">👤 Hồ sơ</h4>
-        <p style="font-size:.8rem;color:var(--muted)">Cài đặt & theo dõi thống kê</p>
       </div>
     </div>
   </div>
@@ -573,7 +573,7 @@
 <div class="cta-section">
   <h2>Sẵn sàng học tập<br>thông minh hơn?</h2>
   <p>Tải Zentro miễn phí và trải nghiệm sức mạnh của AI trong việc lên kế hoạch học tập.</p>
-  <a href="#" class="btn-white">Tải về ngay →</a>
+  <a href="#" class="btn-white download-link">Tải về ngay →</a>
 </div>
 
 <!-- FOOTER -->
@@ -582,6 +582,24 @@
     <a href="mailto:jamesnguyen.ed@gmail.com">Liên hệ</a>
   </p>
 </footer>
+
+<script>
+  // 👉 DÁN LINK GOOGLE DRIVE CHỨA FILE APK VÀO ĐÂY (chỉ cần sửa 1 dòng này):
+  const APK_URL = "https://drive.google.com/file/d/1iM-EHnwxhPt_XMDn0zpGbTTfKZZS3__d/view?usp=sharing";
+
+  document.querySelectorAll('.download-link').forEach(function (el) {
+    if (el.tagName === 'A') {
+      el.setAttribute('href', APK_URL);
+      el.setAttribute('target', '_blank');
+      el.setAttribute('rel', 'noopener');
+    } else {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', function () {
+        window.open(APK_URL, '_blank', 'noopener');
+      });
+    }
+  });
+</script>
 
 </body>
 </html>
