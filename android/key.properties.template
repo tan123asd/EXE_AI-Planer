@@ -1,0 +1,4 @@
+storePassword=<mật_khẩu_keystore>
+keyPassword=<mật_khẩu_key>
+keyAlias=upload
+storeFile=<đường_dẫn_tuyệt_đối_tới_file.jks>

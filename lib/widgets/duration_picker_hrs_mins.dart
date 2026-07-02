@@ -150,7 +150,7 @@ class _DurationPickerHrsMinsDialogState extends State<_DurationPickerHrsMinsDial
                                     fontWeight: FontWeight.w300,
                                     color: isSelected
                                         ? AppColors.textPrimary
-                                        : AppColors.textSecondary.withOpacity(0.55),
+                                        : AppColors.textSecondary.withValues(alpha: 0.55),
                                   ),
                                 ),
                               );
@@ -210,7 +210,7 @@ class _DurationPickerHrsMinsDialogState extends State<_DurationPickerHrsMinsDial
                                     fontWeight: FontWeight.w300,
                                     color: isSelected
                                         ? AppColors.textPrimary
-                                        : AppColors.textSecondary.withOpacity(0.55),
+                                        : AppColors.textSecondary.withValues(alpha: 0.55),
                                   ),
                                 ),
                               );

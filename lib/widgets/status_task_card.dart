@@ -84,7 +84,7 @@ class _StatusTaskCardState extends State<StatusTaskCard>
   }
 
   Color _getSurfaceColor() {
-    return _getAccentColor().withOpacity(0.12);
+    return _getAccentColor().withValues(alpha: 0.12);
   }
 
   IconData _getCategoryIcon() {
@@ -241,14 +241,14 @@ class _StatusTaskCardState extends State<StatusTaskCard>
                   border: Border.all(
                     color: isInProgress
                         ? _getAccentColor()
-                        : _getAccentColor().withOpacity(0.35),
+                        : _getAccentColor().withValues(alpha: 0.35),
                     width: isInProgress ? 2 : 1,
                   ),
                   boxShadow: [
                     BoxShadow(
                       color: isInProgress
-                          ? _getAccentColor().withOpacity(0.18)
-                          : _getAccentColor().withOpacity(0.08),
+                          ? _getAccentColor().withValues(alpha: 0.18)
+                          : _getAccentColor().withValues(alpha: 0.08),
                       blurRadius: isInProgress ? 12 : 8,
                       offset: const Offset(0, 3),
                     ),
@@ -290,7 +290,7 @@ class _StatusTaskCardState extends State<StatusTaskCard>
                                   color: isCompleted
                                       ? AppColors.success
                                       : AppColors.textSecondary
-                                          .withOpacity(0.3),
+                                          .withValues(alpha: 0.3),
                                   width: 2,
                                 ),
                                 borderRadius: BorderRadius.circular(8),
@@ -432,10 +432,10 @@ class _StatusTaskCardState extends State<StatusTaskCard>
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.7),
+                                    color: Colors.white.withValues(alpha: 0.7),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: _getDifficultyColor().withOpacity(0.25),
+                                      color: _getDifficultyColor().withValues(alpha: 0.25),
                                     ),
                                   ),
                                   child: Text(
@@ -462,7 +462,7 @@ class _StatusTaskCardState extends State<StatusTaskCard>
                                   width: 20,
                                   height: 20,
                                   decoration: BoxDecoration(
-                                    color: AppColors.primary.withOpacity(0.2),
+                                    color: AppColors.primary.withValues(alpha: 0.2),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Center(

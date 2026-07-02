@@ -83,7 +83,7 @@ class TaskCard extends StatelessWidget {
                         vertical: AppSpacing.xs,
                       ),
                       decoration: BoxDecoration(
-                        color: _getDifficultyColor().withOpacity(0.1),
+                        color: _getDifficultyColor().withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(AppRadius.sm),
                       ),
                       child: Text(

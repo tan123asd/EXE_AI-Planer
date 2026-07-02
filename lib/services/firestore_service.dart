@@ -379,6 +379,16 @@ class FirestoreService {
     }
 
     await batch.commit();
+
+    // Best-effort: remove the (usually phantom) parent users/{uid} document so
+    // the uid stops lingering in the console. Done OUTSIDE the batch and
+    // swallowed on failure: the default security rules have no match for the
+    // bare users/{uid} doc, so deleting it is permission-denied — that must
+    // NOT roll back the data deletion above. Add a `match /users/{userId}`
+    // delete rule to make this succeed and the uid disappear.
+    try {
+      await _db.collection('users').doc(uid).delete();
+    } catch (_) {}
   }
 }
 

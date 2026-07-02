@@ -30,7 +30,7 @@ class DailyCheckScreen extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(AppSpacing.lg),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
+                        color: AppColors.primary.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(

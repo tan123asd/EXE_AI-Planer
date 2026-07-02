@@ -62,11 +62,11 @@ class AppColors {
   }
 
   static Color subjectSurface(String? subject) {
-    return subjectAccentColor(subject).withOpacity(0.12);
+    return subjectAccentColor(subject).withValues(alpha: 0.12);
   }
 
   static Color subjectBorder(String? subject) {
-    return subjectAccentColor(subject).withOpacity(0.35);
+    return subjectAccentColor(subject).withValues(alpha: 0.35);
   }
   
   // Stats Colors
@@ -132,7 +132,7 @@ class AppRadius {
 class AppShadows {
   static List<BoxShadow> card = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.08),
+      color: Colors.black.withValues(alpha: 0.08),
       blurRadius: 10,
       offset: const Offset(0, 2),
     ),
@@ -140,7 +140,7 @@ class AppShadows {
   
   static List<BoxShadow> cardHover = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.12),
+      color: Colors.black.withValues(alpha: 0.12),
       blurRadius: 20,
       offset: const Offset(0, 4),
     ),

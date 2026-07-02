@@ -869,7 +869,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.12),
+                          color: AppColors.primary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(
@@ -895,7 +895,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               AppLocalizations.of(context)!.changeDatesAndTimes,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: AppColors.textSecondary.withOpacity(0.85),
+                                color: AppColors.textSecondary.withValues(alpha: 0.85),
                               ),
                             ),
                           ],
@@ -950,7 +950,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                         color: AppColors.background,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: AppColors.primary.withOpacity(0.15),
+                          color: AppColors.primary.withValues(alpha: 0.15),
                         ),
                       ),
                       child: Padding(
@@ -981,7 +981,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: AppColors.primary.withOpacity(0.1),
+                                          color: AppColors.primary.withValues(alpha: 0.1),
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(
@@ -1212,7 +1212,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                     AppLocalizations.of(context)!.adjustHowLong,
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.textSecondary.withOpacity(0.9),
+                      color: AppColors.textSecondary.withValues(alpha: 0.9),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -1252,7 +1252,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                             selectedMinutes = mins;
                           });
                         },
-                        selectedColor: AppColors.primary.withOpacity(0.18),
+                        selectedColor: AppColors.primary.withValues(alpha: 0.18),
                         labelStyle: TextStyle(
                           color: isSelected ? AppColors.primary : AppColors.textSecondary,
                           fontWeight: FontWeight.w600,
@@ -1897,7 +1897,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
           border: Border.all(
             color: isSelected 
                 ? AppColors.primary 
-                : AppColors.textSecondary.withOpacity(0.3),
+                : AppColors.textSecondary.withValues(alpha: 0.3),
             width: 1.5,
           ),
         ),
@@ -1926,7 +1926,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 2),
           ),
@@ -2005,7 +2005,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     ),
                                     decoration: BoxDecoration(
                                       color: isSelected
-                                          ? AppColors.textSecondary.withOpacity(0.15)
+                                          ? AppColors.textSecondary.withValues(alpha: 0.15)
                                           : AppColors.background,
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
@@ -2172,7 +2172,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: _deadline != null
-                                      ? AppColors.primary.withOpacity(0.3)
+                                      ? AppColors.primary.withValues(alpha: 0.3)
                                       : Colors.transparent,
                                   width: 1.5,
                                 ),
@@ -2248,7 +2248,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: _scheduleStartTime != null 
-                                      ? AppColors.primary.withOpacity(0.3)
+                                      ? AppColors.primary.withValues(alpha: 0.3)
                                       : Colors.transparent,
                                   width: 1.5,
                                 ),
@@ -2320,7 +2320,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: _scheduleEndTime != null 
-                                      ? AppColors.primary.withOpacity(0.3)
+                                      ? AppColors.primary.withValues(alpha: 0.3)
                                       : Colors.transparent,
                                   width: 1.5,
                                 ),
@@ -2374,7 +2374,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                             l10n.scheduleStopRepeating,
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.textSecondary.withOpacity(0.7),
+                              color: AppColors.textSecondary.withValues(alpha: 0.7),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -2417,7 +2417,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: _scheduleEndDate != null
-                                      ? AppColors.primary.withOpacity(0.3)
+                                      ? AppColors.primary.withValues(alpha: 0.3)
                                       : Colors.transparent,
                                   width: 1.5,
                                 ),
@@ -2506,7 +2506,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: _activityDurationMinutes != null
-                                      ? AppColors.primary.withOpacity(0.3)
+                                      ? AppColors.primary.withValues(alpha: 0.3)
                                       : Colors.transparent,
                                   width: 1.5,
                                 ),
@@ -2562,7 +2562,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                             l10n.maxHoursPerDay,
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.textSecondary.withOpacity(0.7),
+                              color: AppColors.textSecondary.withValues(alpha: 0.7),
                             ),
                           ),
                           const SizedBox(height: 14),
@@ -2630,7 +2630,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                               color: AppColors.background,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: AppColors.primary.withOpacity(0.2),
+                                color: AppColors.primary.withValues(alpha: 0.2),
                               ),
                             ),
                             child: Row(
@@ -2647,7 +2647,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                     l10n.aiWillEstimate,
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: AppColors.textSecondary.withOpacity(0.95),
+                                      color: AppColors.textSecondary.withValues(alpha: 0.95),
                                       height: 1.35,
                                     ),
                                   ),
@@ -2735,15 +2735,15 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                AppColors.primary.withOpacity(0.1),
-                                Colors.blue.withOpacity(0.05),
+                                AppColors.primary.withValues(alpha: 0.1),
+                                Colors.blue.withValues(alpha: 0.05),
                               ],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: AppColors.primary.withOpacity(0.3),
+                              color: AppColors.primary.withValues(alpha: 0.3),
                               width: 1.5,
                             ),
                           ),
@@ -2755,7 +2755,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withOpacity(0.15),
+                                      color: AppColors.primary.withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: const Icon(
@@ -2813,7 +2813,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                         child: Container(
                                           padding: const EdgeInsets.all(6),
                                           decoration: BoxDecoration(
-                                            color: AppColors.primary.withOpacity(0.1),
+                                            color: AppColors.primary.withValues(alpha: 0.1),
                                             borderRadius: BorderRadius.circular(8),
                                           ),
                                           child: const Icon(
@@ -2879,7 +2879,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                   margin: const EdgeInsets.only(bottom: 8),
                                   decoration: BoxDecoration(
                                     color: isSelected
-                                        ? AppColors.primary.withOpacity(0.07)
+                                        ? AppColors.primary.withValues(alpha: 0.07)
                                         : Colors.white,
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
@@ -3001,7 +3001,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                                                     color: isEdited
                                                         ? const Color(0xFFFFF3CD)
                                                         : AppColors.primary
-                                                            .withOpacity(0.1),
+                                                            .withValues(alpha: 0.1),
                                                     borderRadius:
                                                         BorderRadius.circular(9),
                                                   ),
@@ -3290,7 +3290,7 @@ class _NewTaskInputScreenState extends State<NewTaskInputScreen>
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          disabledBackgroundColor: AppColors.textSecondary.withOpacity(0.3),
+                          disabledBackgroundColor: AppColors.textSecondary.withValues(alpha: 0.3),
                         ),
                         child: _isGenerating
                             ? Row(

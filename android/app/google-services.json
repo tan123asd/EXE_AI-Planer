@@ -14,11 +14,27 @@
       },
       "oauth_client": [
         {
+          "client_id": "88398717416-4a1sg4n39avp64ksdagm63mbt59j0drd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.exe.aiplanner",
+            "certificate_hash": "06c3f608d7919f4655d7d5c89c75c311e1d89a16"
+          }
+        },
+        {
           "client_id": "88398717416-dgk46lniugb59qrmrvffvrh94puvr0pv.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.exe.aiplanner",
             "certificate_hash": "58853f6e2c06a2c7668d0ff2344e499fba514a98"
+          }
+        },
+        {
+          "client_id": "88398717416-ss91ou5il00kbknorvtr7v0npdbbbvko.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.exe.aiplanner",
+            "certificate_hash": "331b0ff47346f5bf13119b7207b7f88833d59d57"
           }
         },
         {

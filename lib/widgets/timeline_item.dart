@@ -35,7 +35,7 @@ class TimelineItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary.withOpacity(0.7),
+                color: AppColors.textPrimary.withValues(alpha: 0.7),
               ),
             ),
           ),
@@ -57,7 +57,7 @@ class TimelineItem extends StatelessWidget {
                   duration,
                   style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.textSecondary.withOpacity(0.8),
+                    color: AppColors.textSecondary.withValues(alpha: 0.8),
                   ),
                 ),
               ],

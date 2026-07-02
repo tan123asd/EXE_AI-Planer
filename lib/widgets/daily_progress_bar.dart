@@ -34,15 +34,15 @@ class DailyProgressBar extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppColors.primary.withOpacity(0.1),
-            AppColors.primary.withOpacity(0.05),
+            AppColors.primary.withValues(alpha: 0.1),
+            AppColors.primary.withValues(alpha: 0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(
-          color: AppColors.primary.withOpacity(0.2),
+          color: AppColors.primary.withValues(alpha: 0.2),
           width: 1,
         ),
       ),
@@ -66,7 +66,7 @@ class DailyProgressBar extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: _progressColor.withOpacity(0.15),
+                  color: _progressColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -89,7 +89,7 @@ class DailyProgressBar extends StatelessWidget {
               Container(
                 height: 12,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.5),
+                  color: Colors.white.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(6),
                 ),
               ),
@@ -104,13 +104,13 @@ class DailyProgressBar extends StatelessWidget {
                     gradient: LinearGradient(
                       colors: [
                         _progressColor,
-                        _progressColor.withOpacity(0.7),
+                        _progressColor.withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(6),
                     boxShadow: [
                       BoxShadow(
-                        color: _progressColor.withOpacity(0.4),
+                        color: _progressColor.withValues(alpha: 0.4),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),

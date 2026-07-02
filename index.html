@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zentro — Lên kế hoạch thông minh cùng AI</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --primary:    #FF6B35;
+      --primary-dk: #e05520;
+      --bg:         #F8F9FA;
+      --success:    #10B981;
+      --warning:    #F59E0B;
+      --danger:     #EF4444;
+      --purple:     #7B61FF;
+      --blue:       #3B82F6;
+      --text:       #1a1a2e;
+      --muted:      #6b7280;
+      --card:       #ffffff;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6%;
+      height: 64px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .logo { display: flex; align-items: center; gap: .55rem; text-decoration: none; }
+    .logo-icon {
+      width: 34px; height: 34px; flex-shrink: 0;
+    }
+    .logo-text { font-size: 1.3rem; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
+    .logo-text span { color: var(--primary); }
+    nav ul { list-style: none; display: flex; gap: 2rem; }
+    nav ul a { text-decoration: none; color: var(--muted); font-size: 0.9rem; transition: color .2s; }
+    nav ul a:hover { color: var(--primary); }
+    .nav-cta {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: .5rem 1.2rem;
+      border-radius: 8px;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .nav-cta:hover { background: var(--primary-dk); }
+
+    /* ── HERO ── */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 100px 6% 80px;
+      background: linear-gradient(160deg, #fff5f0 0%, #fff 60%, #f0f4ff 100%);
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: #fff3ee;
+      border: 1px solid #ffd4c2;
+      color: var(--primary);
+      font-size: .8rem;
+      font-weight: 600;
+      padding: .3rem .9rem;
+      border-radius: 99px;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+      font-weight: 800;
+      line-height: 1.2;
+      max-width: 700px;
+      margin-bottom: 1.25rem;
+    }
+    .hero h1 .accent { color: var(--primary); }
+    .hero p {
+      font-size: 1.1rem;
+      color: var(--muted);
+      max-width: 560px;
+      margin-bottom: 2.5rem;
+    }
+    .hero-btns { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      padding: .85rem 2rem;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 1rem;
+      transition: background .2s, transform .15s;
+      box-shadow: 0 4px 14px rgba(255,107,53,.35);
+    }
+    .btn-primary:hover { background: var(--primary-dk); transform: translateY(-2px); }
+    .btn-secondary {
+      background: #fff;
+      color: var(--text);
+      padding: .85rem 2rem;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1rem;
+      border: 1.5px solid #e5e7eb;
+      transition: border-color .2s;
+    }
+    .btn-secondary:hover { border-color: var(--primary); }
+
+    /* ── MOCK PHONE ── */
+    .phone-wrap { margin-top: 4rem; position: relative; }
+    .phone {
+      width: 280px;
+      background: #1a1a2e;
+      border-radius: 40px;
+      padding: 12px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.22), 0 0 0 2px #333;
+    }
+    .phone-screen {
+      border-radius: 30px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .phone-header {
+      background: #fff;
+      padding: 1rem 1.1rem .75rem;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .phone-header .greeting { font-size: .7rem; color: var(--muted); }
+    .phone-header .name { font-size: 1rem; font-weight: 700; }
+    .phone-header .date-badge {
+      display: inline-block;
+      background: #fff3ee;
+      color: var(--primary);
+      font-size: .65rem;
+      font-weight: 600;
+      padding: .2rem .55rem;
+      border-radius: 99px;
+      margin-top: .25rem;
+    }
+    .phone-body { padding: .75rem; }
+    .mini-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: .7rem .85rem;
+      margin-bottom: .55rem;
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      font-size: .72rem;
+    }
+    .mini-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .mini-card .task-name { font-weight: 600; }
+    .mini-card .task-time { color: var(--muted); font-size: .65rem; }
+    .ai-bubble {
+      background: linear-gradient(135deg, var(--primary), var(--purple));
+      color: #fff;
+      border-radius: 14px 14px 14px 2px;
+      padding: .6rem .85rem;
+      font-size: .7rem;
+      line-height: 1.4;
+      margin-bottom: .5rem;
+    }
+    .progress-row { display: flex; justify-content: space-between; font-size: .65rem; margin-bottom: .25rem; }
+    .progress-bar { height: 6px; background: #f3f4f6; border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 99px; }
+
+    /* ── STATS ── */
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 3rem;
+      flex-wrap: wrap;
+      padding: 3rem 6%;
+      background: var(--primary);
+    }
+    .stat { text-align: center; color: #fff; }
+    .stat .num { font-size: 2.2rem; font-weight: 800; }
+    .stat .label { font-size: .85rem; opacity: .85; }
+
+    /* ── FEATURES ── */
+    section { padding: 80px 6%; }
+    .section-label {
+      font-size: .8rem;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: .5rem;
+    }
+    .section-title { font-size: clamp(1.6rem, 3vw, 2.4rem); font-weight: 800; margin-bottom: .75rem; }
+    .section-sub { color: var(--muted); max-width: 560px; }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.5rem;
+      margin-top: 3rem;
+    }
+    .feature-card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 2rem;
+      border: 1px solid #e5e7eb;
+      transition: box-shadow .2s, transform .2s;
+    }
+    .feature-card:hover { box-shadow: 0 8px 30px rgba(0,0,0,.08); transform: translateY(-3px); }
+    .feature-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: .4rem; }
+    .feature-card p { font-size: .88rem; color: var(--muted); }
+
+    /* ── HOW IT WORKS ── */
+    .how-bg { background: #fff; }
+    .steps { display: flex; flex-direction: column; gap: 2rem; margin-top: 3rem; max-width: 640px; }
+    .step { display: flex; gap: 1.25rem; align-items: flex-start; }
+    .step-num {
+      width: 40px; height: 40px; flex-shrink: 0;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: .95rem;
+    }
+    .step h4 { font-weight: 700; margin-bottom: .25rem; }
+    .step p { font-size: .9rem; color: var(--muted); }
+
+    /* ── SCREENS PREVIEW ── */
+    .screens-row {
+      display: flex;
+      gap: 1.5rem;
+      overflow-x: auto;
+      padding-bottom: 1rem;
+      margin-top: 3rem;
+      scrollbar-width: none;
+    }
+    .screens-row::-webkit-scrollbar { display: none; }
+    .screen-card {
+      flex-shrink: 0;
+      width: 200px;
+      background: #fff;
+      border-radius: 20px;
+      padding: 1.25rem 1rem;
+      border: 1px solid #e5e7eb;
+      text-align: center;
+    }
+    .screen-icon { font-size: 2rem; margin-bottom: .6rem; }
+    .screen-card h4 { font-size: .88rem; font-weight: 700; margin-bottom: .3rem; }
+    .screen-card p { font-size: .78rem; color: var(--muted); }
+
+    /* ── CTA ── */
+    .cta-section {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--purple) 100%);
+      color: #fff;
+      text-align: center;
+      padding: 80px 6%;
+    }
+    .cta-section h2 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; margin-bottom: .75rem; }
+    .cta-section p { opacity: .85; margin-bottom: 2rem; }
+    .btn-white {
+      background: #fff;
+      color: var(--primary);
+      padding: .9rem 2.2rem;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 1rem;
+      transition: transform .15s;
+      display: inline-block;
+    }
+    .btn-white:hover { transform: translateY(-2px); }
+
+    /* ── FOOTER ── */
+    footer {
+      background: #1a1a2e;
+      color: #9ca3af;
+      text-align: center;
+      padding: 2rem 6%;
+      font-size: .85rem;
+    }
+    footer a { color: var(--primary); text-decoration: none; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      nav ul { display: none; }
+      .hero { padding: 60px 5% 50px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="logo" href="#">
+    <img class="logo-icon" src="assets/logo.png" alt="Zentro">
+    <span class="logo-text">Zen<span>tro</span></span>
+  </a>
+  <ul>
+    <li><a href="#features">Tính năng</a></li>
+    <li><a href="#how">Cách dùng</a></li>
+    <li><a href="#screens">Màn hình</a></li>
+  </ul>
+  <button class="nav-cta download-link">Tải ngay</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <!-- Hero logo -->
+  <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.75rem;">
+    <img src="assets/logo.png" alt="Zentro" style="width:56px;height:56px">
+    <span style="font-size:2rem;font-weight:800;color:var(--text);letter-spacing:-1px">Zen<span style="color:var(--primary)">tro</span></span>
+  </div>
+
+  <h1>Lên kế hoạch học tập<br>thông minh hơn với <span class="accent">AI</span></h1>
+  <p>Zentro giúp sinh viên tự động sắp xếp lịch học, phát hiện xung đột thời gian và theo dõi hiệu suất — tất cả qua cuộc trò chuyện tự nhiên.</p>
+  <div class="hero-btns">
+    <a href="#" class="btn-primary download-link">Tải về Android</a>
+    <a href="#features" class="btn-secondary">Xem tính năng →</a>
+  </div>
+
+  <!-- Phone screenshot -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <img src="assets/z7929301262637_3a4f9ec1187313cf641aea1b755ef7e1.jpg" style="width:100%;border-radius:30px;display:block" alt="Zentro Home Screen">
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat"><div class="num">AI</div><div class="label">Lên lịch tự động</div></div>
+  <div class="stat"><div class="num">2</div><div class="label">Ngôn ngữ (VI / EN)</div></div>
+  <div class="stat"><div class="num">50/10</div><div class="label">Pomodoro tích hợp</div></div>
+  <div class="stat"><div class="num">∞</div><div class="label">Cuộc trò chuyện với AI</div></div>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-label">Tính năng</div>
+  <div class="section-title">Mọi thứ bạn cần để<br>học tập hiệu quả</div>
+  <p class="section-sub">Từ nhắc nhở nghỉ giải lao đến phân tích hiệu suất, Zentro là người bạn đồng hành học tập toàn diện.</p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#fff3ee">🤖</div>
+      <h3>Chat với Zentro</h3>
+      <p>Nói chuyện tự nhiên bằng tiếng Việt để thêm task, dời lịch, đánh dấu hoàn thành — AI hiểu ý định và thực thi cho bạn.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#f0fdf4">📅</div>
+      <h3>Lên lịch thông minh</h3>
+      <p>AI tự động chọn khung giờ tối ưu dựa trên deadline, mức độ tập trung và thói quen cá nhân của bạn.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#fef9c3">⚡</div>
+      <h3>Phát hiện xung đột</h3>
+      <p>Phát hiện ngay khi hai task chồng chéo nhau và tự động đề xuất khung giờ thay thế phù hợp nhất.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#eff6ff">📊</div>
+      <h3>Theo dõi hiệu suất</h3>
+      <p>So sánh thời gian dự kiến và thực tế. Biểu đồ trực quan cho thấy bạn đang cải thiện từng ngày.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#fdf4ff">⏰</div>
+      <h3>Nhắc nhở nghỉ giải lao</h3>
+      <p>Kỹ thuật Pomodoro 50/10 được tích hợp sẵn — làm việc 50 phút, nghỉ 10 phút để duy trì năng lượng.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#ecfdf5">🏃</div>
+      <h3>Quản lý hoạt động cá nhân</h3>
+      <p>Thêm thói quen và sở thích như tập gym, đọc sách. AI sắp xếp chúng vào thời gian rảnh phù hợp nhất.</p>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" class="how-bg">
+  <div class="section-label">Cách hoạt động</div>
+  <div class="section-title">Bắt đầu chỉ trong<br>3 bước đơn giản</div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <h4>Kể với AI về công việc của bạn</h4>
+        <p>Nhắn tin tự nhiên: "Tôi cần làm báo cáo OOP trước ngày 20, mất khoảng 6 tiếng" — AI sẽ hỏi thêm nếu cần.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <h4>AI tạo lịch trình tối ưu</h4>
+        <p>Hệ thống phân tích deadline, mức độ ưu tiên và khung giờ tập trung của bạn để tạo kế hoạch chi tiết.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <h4>Xác nhận và thực hiện</h4>
+        <p>Xem trước kế hoạch, chỉnh sửa nếu muốn, rồi xác nhận. AI lưu tất cả và nhắc bạn đúng giờ.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SCREENS -->
+<section id="screens">
+  <div class="section-label">Màn hình</div>
+  <div class="section-title">Giao diện đẹp,<br>dễ dùng ngay lần đầu</div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.5rem;margin-top:3rem">
+    <div style="background:#fff;border-radius:14px;padding:0;overflow:hidden;border:1px solid #e5e7eb;transition:box-shadow .2s;cursor:pointer;display:flex;flex-direction:column" onmouseover="this.style.boxShadow='0 8px 20px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
+      <img src="assets/z7929301262637_3a4f9ec1187313cf641aea1b755ef7e1.jpg" style="width:100%;height:auto;display:block;flex:1;object-fit:contain" alt="Home Screen">
+      <div style="padding:1rem;border-top:1px solid #e5e7eb">
+        <h4 style="font-weight:700;margin-bottom:.3rem">🏠 Trang chủ</h4>
+        <p style="font-size:.8rem;color:var(--muted)">Tổng quan tiến độ & gợi ý AI</p>
+      </div>
+    </div>
+
+    <div style="background:#fff;border-radius:14px;padding:0;overflow:hidden;border:1px solid #e5e7eb;transition:box-shadow .2s;cursor:pointer;display:flex;flex-direction:column" onmouseover="this.style.boxShadow='0 8px 20px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
+      <img src="assets/1781940098759_7900403285318780619_g955343821756253994_c00fc4ae60f9bd80a717ff9d4cdc2b0c.jpg" style="width:100%;height:auto;display:block;flex:1;object-fit:contain" alt="Chat Screen">
+      <div style="padding:1rem;border-top:1px solid #e5e7eb">
+        <h4 style="font-weight:700;margin-bottom:.3rem">💬 Chat AI</h4>
+        <p style="font-size:.8rem;color:var(--muted)">Quản lý lịch qua trò chuyện</p>
+      </div>
+    </div>
+
+    <div style="background:#fff;border-radius:14px;padding:0;overflow:hidden;border:1px solid #e5e7eb;transition:box-shadow .2s;cursor:pointer;display:flex;flex-direction:column" onmouseover="this.style.boxShadow='0 8px 20px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
+      <img src="assets/1781939833913_7900403285318780619_g955343821756253994_dd82edc4ad67d0baf0d3cb6ca95373af.jpg" style="width:100%;height:auto;display:block;flex:1;object-fit:contain" alt="AI Recommendation Screen">
+      <div style="padding:1rem;border-top:1px solid #e5e7eb">
+        <h4 style="font-weight:700;margin-bottom:.3rem">🤖 Gợi ý AI</h4>
+        <p style="font-size:.8rem;color:var(--muted)">Kế hoạch được AI tạo tự động</p>
+      </div>
+    </div>
+
+    <div style="background:#fff;border-radius:14px;padding:0;overflow:hidden;border:1px solid #e5e7eb;transition:box-shadow .2s;cursor:pointer;display:flex;flex-direction:column" onmouseover="this.style.boxShadow='0 8px 20px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
+      <img src="assets/z7929272621624_f5988dd3dc62e68e2de626eef01b5f11.jpg" style="width:100%;height:auto;display:block;flex:1;object-fit:contain" alt="Calendar Screen">
+      <div style="padding:1rem;border-top:1px solid #e5e7eb">
+        <h4 style="font-weight:700;margin-bottom:.3rem">📆 Lịch</h4>
+        <p style="font-size:.8rem;color:var(--muted)">Timeline trực quan theo ngày</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section style="background:#f5f3ff;padding:80px 6%">
+  <div class="section-label" style="color:#7B61FF">Gói cước</div>
+  <div class="section-title">Chọn gói phù hợp<br>với nhu cầu của bạn</div>
+  <p class="section-sub">Tất cả gói đều có đầy đủ tính năng cơ bản. Nâng cấp Pro để mở khóa AI chat nâng cao.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:2rem;margin-top:3rem;max-width:1000px;margin-left:auto;margin-right:auto">
+    <!-- Free Plan -->
+    <div style="background:#fff;border-radius:16px;padding:2.5rem 2rem;border:2px solid #e5e7eb;position:relative;display:flex;flex-direction:column">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text);margin-bottom:.5rem">Miễn phí</div>
+      <div style="font-size:.9rem;color:var(--muted);margin-bottom:1.5rem">Để bắt đầu</div>
+      <div style="font-size:2.2rem;font-weight:800;color:var(--text);margin-bottom:1.5rem">0<span style="font-size:1rem;color:var(--muted);font-weight:600">đ</span></div>
+
+      <ul style="list-style:none;flex:1;margin-bottom:2rem;font-size:.9rem;color:var(--text);line-height:2">
+        <li>✓ Tạo task & lên lịch cơ bản</li>
+        <li>✓ Xem lịch ngày/tuần</li>
+        <li>✓ Theo dõi hiệu suất</li>
+        <li style="color:var(--muted);text-decoration:line-through">✗ Chat AI nâng cao</li>
+        <li style="color:var(--muted);text-decoration:line-through">✗ Phân tích chi tiết</li>
+        <li style="color:var(--muted);text-decoration:line-through">✗ Hỗ trợ ưu tiên</li>
+      </ul>
+
+      <button style="width:100%;padding:.85rem 1.5rem;background:#f3f4f6;color:var(--text);border:none;border-radius:10px;font-weight:700;cursor:pointer;font-size:.95rem;transition:background .2s">Đang dùng</button>
+    </div>
+
+    <!-- Pro Monthly -->
+    <div style="background:#fff;border-radius:16px;padding:2.5rem 2rem;border:2px solid var(--primary);position:relative;display:flex;flex-direction:column;transform:scale(1.05);box-shadow:0 10px 30px rgba(255,107,53,.15)">
+      <div style="position:absolute;top:-12px;right:20px;background:var(--primary);color:#fff;padding:.4rem 1rem;border-radius:99px;font-size:.75rem;font-weight:700">PHỔ BIẾN</div>
+
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text);margin-bottom:.5rem">Pro tháng</div>
+      <div style="font-size:.9rem;color:var(--muted);margin-bottom:1.5rem">Linh hoạt</div>
+      <div style="font-size:2.2rem;font-weight:800;color:var(--primary);margin-bottom:.25rem">79<span style="font-size:1rem;color:var(--muted);font-weight:600">.000đ</span></div>
+      <div style="font-size:.85rem;color:var(--muted);margin-bottom:1.5rem">/tháng · Hủy bất kỳ lúc nào</div>
+
+      <ul style="list-style:none;flex:1;margin-bottom:2rem;font-size:.9rem;color:var(--text);line-height:2">
+        <li>✓ Mọi tính năng miễn phí</li>
+        <li style="color:var(--primary);font-weight:600">✓ Chat AI nâng cao</li>
+        <li style="color:var(--primary);font-weight:600">✓ Phân tích chi tiết</li>
+        <li style="color:var(--primary);font-weight:600">✓ Hỗ trợ ưu tiên</li>
+        <li style="color:var(--primary);font-weight:600">✓ Thêm hoạt động cá nhân</li>
+      </ul>
+
+      <button style="width:100%;padding:.85rem 1.5rem;background:var(--primary);color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-size:.95rem;transition:background .2s" onmouseover="this.style.background='var(--primary-dk)'" onmouseout="this.style.background='var(--primary)'">Nâng cấp ngay</button>
+    </div>
+
+    <!-- Pro Yearly -->
+    <div style="background:#fff;border-radius:16px;padding:2.5rem 2rem;border:2px solid #e5e7eb;position:relative;display:flex;flex-direction:column">
+      <div style="background:#10B981;color:#fff;padding:.3rem .8rem;border-radius:6px;font-size:.75rem;font-weight:700;margin-bottom:1rem;display:inline-block;width:fit-content">Tiết kiệm 158k</div>
+
+      <div style="font-size:1.1rem;font-weight:700;color:var(--text);margin-bottom:.5rem">Pro năm</div>
+      <div style="font-size:.9rem;color:var(--muted);margin-bottom:1.5rem">Tốt nhất</div>
+      <div style="font-size:2.2rem;font-weight:800;color:var(--text);margin-bottom:.25rem">790<span style="font-size:1rem;color:var(--muted);font-weight:600">.000đ</span></div>
+      <div style="font-size:.85rem;color:var(--muted);margin-bottom:1.5rem">Chỉ 65.833đ/tháng</div>
+
+      <ul style="list-style:none;flex:1;margin-bottom:2rem;font-size:.9rem;color:var(--text);line-height:2">
+        <li>✓ Mọi tính năng Pro tháng</li>
+        <li>✓ Giảm 16% so với tính tháng</li>
+        <li>✓ Ưu tiên cao nhất</li>
+        <li>✓ Bảo hành thêm 30 ngày</li>
+        <li style="color:var(--muted)">Tự động gia hạn hàng năm</li>
+      </ul>
+
+      <button style="width:100%;padding:.85rem 1.5rem;background:var(--text);color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-size:.95rem;transition:background .2s" onmouseover="this.style.background='#0f0f23'" onmouseout="this.style.background='var(--text)'">Nâng cấp ngay</button>
+    </div>
+  </div>
+
+  <!-- Comparison Table -->
+  <div style="margin-top:4rem;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb">
+    <div style="padding:1.5rem 2rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-weight:700;color:var(--text)">So sánh tính năng</div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0">
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;font-weight:600;color:var(--text)">Tính năng</div>
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;text-align:center;font-weight:600;color:var(--text)">Miễn phí</div>
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;text-align:center;font-weight:600;color:var(--primary)">Pro tháng</div>
+      <div style="padding:1.25rem 2rem;text-align:center;font-weight:600;color:var(--text)">Pro năm</div>
+
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;color:var(--muted)">Tạo task</div>
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;text-align:center">✓</div>
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;text-align:center">✓</div>
+      <div style="padding:1.25rem 2rem;border-top:1px solid #e5e7eb;text-align:center">✓</div>
+
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;color:var(--muted)">Chat AI</div>
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;text-align:center;color:var(--muted)">−</div>
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;text-align:center">✓</div>
+      <div style="padding:1.25rem 2rem;border-top:1px solid #e5e7eb;text-align:center">✓</div>
+
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;color:var(--muted)">Phân tích chi tiết</div>
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;text-align:center;color:var(--muted)">−</div>
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;text-align:center">✓</div>
+      <div style="padding:1.25rem 2rem;border-top:1px solid #e5e7eb;text-align:center">✓</div>
+
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;color:var(--muted)">Hỗ trợ ưu tiên</div>
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;text-align:center;color:var(--muted)">−</div>
+      <div style="padding:1.25rem 2rem;border-right:1px solid #e5e7eb;border-top:1px solid #e5e7eb;text-align:center">✓</div>
+      <div style="padding:1.25rem 2rem;border-top:1px solid #e5e7eb;text-align:center">✓</div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="cta-section">
+  <h2>Sẵn sàng học tập<br>thông minh hơn?</h2>
+  <p>Tải Zentro miễn phí và trải nghiệm sức mạnh của AI trong việc lên kế hoạch học tập.</p>
+  <a href="#" class="btn-white download-link">Tải về ngay →</a>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <p>© 2026 Zentro · Xây dựng bằng Flutter &amp; Gemini AI ·
+    <a href="mailto:jamesnguyen.ed@gmail.com">Liên hệ</a>
+  </p>
+</footer>
+
+<script>
+  // 👉 DÁN LINK GOOGLE DRIVE CHỨA FILE APK VÀO ĐÂY (chỉ cần sửa 1 dòng này):
+  const APK_URL = "https://drive.google.com/file/d/1iM-EHnwxhPt_XMDn0zpGbTTfKZZS3__d/view?usp=sharing";
+
+  document.querySelectorAll('.download-link').forEach(function (el) {
+    if (el.tagName === 'A') {
+      el.setAttribute('href', APK_URL);
+      el.setAttribute('target', '_blank');
+      el.setAttribute('rel', 'noopener');
+    } else {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', function () {
+        window.open(APK_URL, '_blank', 'noopener');
+      });
+    }
+  });
+</script>
+
+</body>
+</html>

@@ -129,7 +129,7 @@ class _TimePicker12hDialogState extends State<_TimePicker12hDialog> {
             height: 72,
             decoration: BoxDecoration(
               color: isActive
-                  ? AppColors.primary.withOpacity(0.12)
+                  ? AppColors.primary.withValues(alpha: 0.12)
                   : const Color(0xFFEEF0F2),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -297,7 +297,7 @@ class _PeriodBtn extends StatelessWidget {
         width: 52,
         height: 36,
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary.withOpacity(0.12) : Colors.transparent,
+          color: selected ? AppColors.primary.withValues(alpha: 0.12) : Colors.transparent,
           border: Border.all(
             color: selected ? AppColors.primary : Colors.grey.shade400,
             width: selected ? 1.5 : 1.0,

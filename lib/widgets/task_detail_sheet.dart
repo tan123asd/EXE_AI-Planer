@@ -81,7 +81,7 @@ class TaskDetailSheet extends StatelessWidget {
                           Text(
                             '$dateText  $timeText',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.92),
+                              color: Colors.white.withValues(alpha: 0.92),
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -176,7 +176,7 @@ class TaskDetailSheet extends StatelessWidget {
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                           disabledBackgroundColor:
-                              AppColors.textSecondary.withOpacity(0.25),
+                              AppColors.textSecondary.withValues(alpha: 0.25),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),

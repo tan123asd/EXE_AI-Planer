@@ -254,15 +254,15 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppColors.primary.withOpacity(0.1),
-            Colors.blue.withOpacity(0.05),
+            AppColors.primary.withValues(alpha: 0.1),
+            Colors.blue.withValues(alpha: 0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppColors.primary.withOpacity(0.3),
+          color: AppColors.primary.withValues(alpha: 0.3),
           width: 1.5,
         ),
       ),
@@ -275,7 +275,7 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.15),
+                  color: AppColors.primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.smart_toy,
@@ -362,10 +362,10 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.warning.withOpacity(0.1),
+                color: AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
                 border:
-                    Border.all(color: AppColors.warning.withOpacity(0.3)),
+                    Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -570,7 +570,7 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border:
-            Border.all(color: AppColors.warning.withOpacity(0.4), width: 1.5),
+            Border.all(color: AppColors.warning.withValues(alpha: 0.4), width: 1.5),
       ),
       child: Row(
         children: [
@@ -598,7 +598,7 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isSelected ? AppColors.primary.withOpacity(0.07) : Colors.white,
+        color: isSelected ? AppColors.primary.withValues(alpha: 0.07) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isSelected
@@ -692,7 +692,7 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: anySelected
-            ? AppColors.primary.withOpacity(0.07)
+            ? AppColors.primary.withValues(alpha: 0.07)
             : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
@@ -822,7 +822,7 @@ class _ChatPlanPreviewCardState extends State<ChatPlanPreviewCard> {
           decoration: BoxDecoration(
             color: isEdited
                 ? const Color(0xFFFFF3CD)
-                : AppColors.primary.withOpacity(0.1),
+                : AppColors.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(9),
           ),
           child: Icon(

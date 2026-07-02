@@ -229,9 +229,9 @@ class _TasksScreenState extends State<TasksScreen> {
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: accentColor.withOpacity(0.1),
+        color: accentColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: accentColor.withOpacity(0.35)),
+        border: Border.all(color: accentColor.withValues(alpha: 0.35)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,7 +307,7 @@ class _TasksScreenState extends State<TasksScreen> {
           color: isActive ? AppColors.primary : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isActive ? AppColors.primary : AppColors.textSecondary.withOpacity(0.25),
+            color: isActive ? AppColors.primary : AppColors.textSecondary.withValues(alpha: 0.25),
           ),
         ),
         child: Text(
@@ -363,7 +363,7 @@ class _TasksScreenState extends State<TasksScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -415,7 +415,7 @@ class _TasksScreenState extends State<TasksScreen> {
                         Icon(
                           Icons.task_alt,
                           size: 80,
-                          color: AppColors.textSecondary.withOpacity(0.3),
+                          color: AppColors.textSecondary.withValues(alpha: 0.3),
                         ),
                         const SizedBox(height: AppSpacing.lg),
                         Text(
@@ -434,7 +434,7 @@ class _TasksScreenState extends State<TasksScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 14,
-                            color: AppColors.textSecondary.withOpacity(0.7),
+                            color: AppColors.textSecondary.withValues(alpha: 0.7),
                           ),
                         ),
                       ],
